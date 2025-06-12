@@ -77,3 +77,5 @@ e
 ```bash
    npm start
 ```
+
+Lembre-se de descomentar as funções em script_insert2.py para que quando executado, ele de fato crie os arquivos que serão utilizados um a um no query tool do banco de dados clinicplus
