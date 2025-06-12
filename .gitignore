@@ -1,0 +1,8 @@
+# Ignorar arquivos/pastas comuns
+node_modules/
+.env
+TXTS/
+*.log
+dist/
+build/
+.DS_Store
