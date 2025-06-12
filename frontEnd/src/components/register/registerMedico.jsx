@@ -1,198 +1,333 @@
-import React, { Component } from 'react'
-import axios from 'axios'
-import Main from '../template/Main'
+import React, { Component } from "react";
+import axios from "axios";
+import Main from "../template/Main";
 
 const headerProps = {
-    icon: '',
-    title: 'Cadastros',
-    subtitle: 'Tela de cadastro de Medicos'
-}
+  icon: "fa fa-user-md",
+  title: "Cadastros",
+  subtitle: "Tela de cadastro de Médicos",
+};
 
-const baseUrl = 'http://localhost:3001/teacher'
+const baseUrl = "http://localhost:4040/medicos"; // URL mais específica
 const initialState = {
-    user: { name: '', email: '' },
-    list: []
-}
+  user: {
+    name: "",
+    crm: "",
+    telefone: "",
+    percentual: "",
+    especialidade: "",
+  },
+  list: [],
+  loading: false,
+  error: null,
+};
 
 export default class RegisterMedico extends Component {
+  state = { ...initialState };
 
-    state = { ...initialState }
+  // Mudança: componentWillMount está depreciado, usar componentDidMount
+  componentDidMount() {
+    this.loadMedicos();
+  }
 
-    componentWillMount() {
-        axios(baseUrl).then(resp => {
-            this.setState({ list: resp.data })
-        })
+  // Função separada para carregar médicos com tratamento de erro
+  loadMedicos() {
+    this.setState({ loading: true, error: null });
+
+    axios
+      .get(baseUrl)
+      .then((resp) => {
+        console.log("Dados recebidos:", resp.data); // Para debug
+        this.setState({
+          list: resp.data || [],
+          loading: false,
+        });
+      })
+      .catch((error) => {
+        console.error("Erro ao carregar médicos:", error);
+        this.setState({
+          error: "Erro ao carregar a lista de médicos",
+          loading: false,
+          list: [],
+        });
+      });
+  }
+
+  clear() {
+    this.setState({ user: initialState.user });
+  }
+
+  save() {
+    const user = this.state.user;
+
+    // Validação básica
+    if (!user.name || !user.crm) {
+      alert("Nome e CRM são obrigatórios!");
+      return;
     }
 
-    clear() {
-        this.setState({ user: initialState.user })
-    }
+    this.setState({ loading: true });
 
-    save() {
-        const user = this.state.user
-        const method = user.id ? 'put' : 'post'
-        const url = user.id ? `${baseUrl}/${user.id}` : baseUrl
-        axios[method](url, user)
-            .then(resp => {
-                const list = this.getUpdatedList(resp.data)
-                this.setState({ user: initialState.user, list })
-            })
-    }
+    const method = user.id ? "put" : "post";
+    const url = user.id ? `${baseUrl}/${user.id}` : baseUrl;
 
-    getUpdatedList(user, add = true) {
-        const list = this.state.list.filter(u => u.id !== user.id)
-        if(add) list.unshift(user)
-        return list
-    }
+    axios[method](url, user)
+      .then((resp) => {
+        const list = this.getUpdatedList(resp.data);
+        this.setState({
+          user: initialState.user,
+          list,
+          loading: false,
+        });
+        alert(
+          user.id
+            ? "Médico atualizado com sucesso!"
+            : "Médico cadastrado com sucesso!"
+        );
+      })
+      .catch((error) => {
+        console.error("Erro ao salvar médico:", error);
+        this.setState({ loading: false });
+        alert("Erro ao salvar médico!");
+      });
+  }
 
-    updateField(event) {
-        const user = { ...this.state.user }
-        user[event.target.name] = event.target.value
-        this.setState({ user })
-    }
+  getUpdatedList(user, add = true) {
+    const list = this.state.list.filter((u) => u.id !== user.id);
+    if (add) list.unshift(user);
+    return list;
+  }
 
-    renderForm() {
-        return (
-            <div className="form">
-                <div className="row">
-                    <div className="col-12 col-md-6">
-                        <div className="form-group">
-                            <label>Nome</label>
-                            <input type="text" className="form-control"
-                                name="name"
-                                value={this.state.user.name}
-                                onChange={e => this.updateField(e)}
-                                placeholder="Digite o nome..." />
-                        </div>
-                    </div>
+  updateField(event) {
+    const user = { ...this.state.user };
+    user[event.target.name] = event.target.value;
+    this.setState({ user });
+  }
 
-                    <div className="col-12 col-md-6">
-                        <div className="form-group">
-                            <label>CRM</label>
-                            <input type="text" className="form-control"
-                                name="crm"
-                                value={this.state.user.crm}
-                                onChange={e => this.updateField(e)}
-                                placeholder="Digite o crm..." />
-                        </div>
-                    </div>
+  renderForm() {
+    const { user, loading } = this.state;
 
-                    <div className="col-12 col-md-6">
-                        <div className="form-group">
-                            <label>Telefone</label>
-                            <input type="text" className="form-control"
-                                name="telefone"
-                                value={this.state.user.telefone}
-                                onChange={e => this.updateField(e)}
-                                placeholder="Digite o telefone..." />
-                        </div>
-                    </div>
-                    <div className="col-12 col-md-6">
-                        <div className="form-group">
-                            <label>Percentual</label>
-                            <input type="text" className="form-control"
-                                name="percentual"
-                                value={this.state.user.percentual}
-                                onChange={e => this.updateField(e)}
-                                placeholder="Digite o telefone..." />
-                        </div>
-                    </div>
-                    <div className="col-12 col-md-6">
-                        <div className="form-group">
-                            <label>Especialidade</label>
-                            <input type="text" className="form-control"
-                                name="especialidade"
-                                value={this.state.user.percentual}
-                                onChange={e => this.updateField(e)}
-                                placeholder="Digite o codigo da especialidade..." />
-                        </div>
-                    </div>
-
-
-
-
-                </div>
-
-                <hr />
-                <div className="row">
-                    <div className="col-12 d-flex justify-content-end">
-                        <button className="btn btn-primary"
-                            onClick={e => this.save(e)}>
-                            Cadastrar
-                        </button>
-
-                        <button className="btn btn-secondary ml-2"
-                            onClick={e => this.clear(e)}>
-                            Cancelar
-                        </button>
-                    </div>
-                </div>
+    return (
+      <div className="form">
+        <div className="row">
+          <div className="col-12 col-md-6">
+            <div className="form-group">
+              <label>Nome *</label>
+              <input
+                type="text"
+                className="form-control"
+                name="name"
+                value={user.name}
+                onChange={(e) => this.updateField(e)}
+                placeholder="Digite o nome completo..."
+                disabled={loading}
+              />
             </div>
-        )
+          </div>
+
+          <div className="col-12 col-md-6">
+            <div className="form-group">
+              <label>CRM *</label>
+              <input
+                type="text"
+                className="form-control"
+                name="crm"
+                value={user.crm}
+                onChange={(e) => this.updateField(e)}
+                placeholder="Digite o CRM..."
+                disabled={loading}
+              />
+            </div>
+          </div>
+
+          <div className="col-12 col-md-6">
+            <div className="form-group">
+              <label>Telefone</label>
+              <input
+                type="text"
+                className="form-control"
+                name="telefone"
+                value={user.telefone}
+                onChange={(e) => this.updateField(e)}
+                placeholder="(11) 99999-9999"
+                disabled={loading}
+              />
+            </div>
+          </div>
+
+          <div className="col-12 col-md-6">
+            <div className="form-group">
+              <label>Percentual (%)</label>
+              <input
+                type="number"
+                className="form-control"
+                name="percentual"
+                value={user.percentual}
+                onChange={(e) => this.updateField(e)}
+                placeholder="Ex: 30"
+                min="0"
+                max="100"
+                disabled={loading}
+              />
+            </div>
+          </div>
+
+          <div className="col-12 col-md-6">
+            <div className="form-group">
+              <label>Código da Especialidade</label>
+              <input
+                type="text"
+                className="form-control"
+                name="especialidade"
+                value={user.especialidade}
+                onChange={(e) => this.updateField(e)}
+                placeholder="Digite o código da especialidade..."
+                disabled={loading}
+              />
+            </div>
+          </div>
+        </div>
+
+        <hr />
+        <div className="row">
+          <div className="col-12 d-flex justify-content-end">
+            <button
+              className="btn btn-primary"
+              onClick={(e) => this.save(e)}
+              disabled={loading}
+            >
+              {loading ? "Salvando..." : user.id ? "Atualizar" : "Cadastrar"}
+            </button>
+
+            <button
+              className="btn btn-secondary ml-2"
+              onClick={(e) => this.clear(e)}
+              disabled={loading}
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  load(user) {
+    this.setState({ user });
+  }
+
+  remove(user) {
+    if (
+      !window.confirm(`Tem certeza que deseja excluir o médico ${user.name}?`)
+    ) {
+      return;
     }
 
-    load(user) {
-        this.setState({ user })
+    axios
+      .delete(`${baseUrl}/${user.id}`)
+      .then((resp) => {
+        const list = this.getUpdatedList(user, false);
+        this.setState({ list });
+        alert("Médico removido com sucesso!");
+      })
+      .catch((error) => {
+        console.error("Erro ao remover médico:", error);
+        alert("Erro ao remover médico!");
+      });
+  }
+
+  renderTable() {
+    const { list, loading, error } = this.state;
+
+    if (loading) {
+      return (
+        <div className="text-center mt-4">
+          <div className="spinner-border" role="status">
+            <span className="sr-only">Carregando...</span>
+          </div>
+          <p>Carregando médicos...</p>
+        </div>
+      );
     }
 
-    remove(user) {
-        axios.delete(`${baseUrl}/${user.id}`).then(resp => {
-            const list = this.getUpdatedList(user, false)
-            this.setState({ list })
-        })
+    if (error) {
+      return (
+        <div className="alert alert-danger mt-4">
+          <h5>Erro ao carregar dados</h5>
+          <p>{error}</p>
+          <button
+            className="btn btn-outline-danger"
+            onClick={() => this.loadMedicos()}
+          >
+            Tentar novamente
+          </button>
+        </div>
+      );
     }
 
-    renderTable() {
-        return (
-            <table className="table mt-4">
-                <thead>
-                    <tr>
-                        <th>Nome</th>
-                        <th>CRM</th>
-                        <th>Telefone</th>
-                        <th>Percentual</th>
-                        <th>Especialidade</th>
-                        <th>Editar/Apagar</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {this.renderRows()}
-                </tbody>
-            </table>
-        )
+    if (list.length === 0) {
+      return (
+        <div className="alert alert-info mt-4">
+          <h5>Nenhum médico cadastrado</h5>
+          <p>Cadastre o primeiro médico utilizando o formulário acima.</p>
+        </div>
+      );
     }
 
-    renderRows() {
-        return this.state.list.map(user => {
-            let styles = {
-                width: '35px'
-              };
-            return (
-                <tr key={user.id}>
-                    <td>{user.id}</td>
-                    <td>{user.name}</td>
-                    <td>{user.email}</td>
-                    <td>
-                        <button className="btn btn-warning"
-                            onClick={() => this.load(user)}>
-                            <i className="fa fa-pencil"></i>
-                        </button>
-                        <button className="btn btn-danger ml-2"
-                            onClick={() => this.remove(user)}>
-                            <i className="fa fa-trash"></i>
-                        </button>
-                    </td>
-                </tr>
-            )
-        })
-    }
-    
-    render() {
-        return (
-            <Main {...headerProps}>
-                {this.renderForm()}
-                {this.renderTable()}
-            </Main>
-        )
-    }
+    return (
+      <table className="table table-striped mt-4">
+        <thead className="thead-dark">
+          <tr>
+            <th>Nome</th>
+            <th>CRM</th>
+            <th>Telefone</th>
+            <th>Percentual</th>
+            <th>Especialidade</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody>{this.renderRows()}</tbody>
+      </table>
+    );
+  }
+
+  renderRows() {
+    return this.state.list.map((medico) => {
+      return (
+        <tr key={medico.crm}>
+          <td>{medico.name || medico.nomem}</td>{" "}
+          {/* Flexibilidade para diferentes nomes de campo */}
+          <td>{medico.crm}</td>
+          <td>{medico.telefone}</td>
+          <td>{medico.percentual}%</td>
+          <td>{medico.especialidade}</td>
+          <td>
+            <button
+              className="btn btn-warning btn-sm mr-2"
+              onClick={() => this.load(medico)}
+              title="Editar"
+            >
+              <i className="fa fa-pencil"></i>
+            </button>
+            <button
+              className="btn btn-danger btn-sm"
+              onClick={() => this.remove(medico)}
+              title="Excluir"
+            >
+              <i className="fa fa-trash"></i>
+            </button>
+          </td>
+        </tr>
+      );
+    });
+  }
+
+  render() {
+    return (
+      <Main {...headerProps}>
+        {this.renderForm()}
+        {this.renderTable()}
+      </Main>
+    );
+  }
 }
