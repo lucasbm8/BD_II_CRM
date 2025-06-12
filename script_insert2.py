@@ -170,7 +170,7 @@ if __name__ == "__main__":
     print("--- INICIANDO GERAÇÃO DE DADOS SQL ---\n")
     
     # Ordem de execução é crucial para respeitar as chaves estrangeiras
-    '''gerar_pacientes()
+    gerar_pacientes()
     gerar_medicos()
     gerar_especialidades()
     gerar_doencas()
@@ -181,7 +181,7 @@ if __name__ == "__main__":
     print("\n--- GERANDO DADOS PARA TABELAS RESTANTES ---\n")
     gerar_agendas()
     #gerar_exerce_esp()
-    gerar_diagnostica_join()'''
+    gerar_diagnostica_join()
     # ----------------------------------------
     
     print("\n--- GERAÇÃO DE DADOS CONCLUÍDA ---")

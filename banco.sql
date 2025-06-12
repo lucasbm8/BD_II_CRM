@@ -1,4 +1,4 @@
-CREATE DATABASE climed
+CREATE DATABASE clinicplus
     WITH
     OWNER = postgres
     ENCODING = 'UTF8'
@@ -7,7 +7,7 @@ CREATE DATABASE climed
     TABLESPACE = pg_default
     CONNECTION LIMIT = -1;
 
-USE climed;
+USE clinicplus;
 
 CREATE TABLE Paciente (
   CodigoP INT PRIMARY KEY,
@@ -56,7 +56,7 @@ CREATE TABLE Diagnostico (
   Observacoes VARCHAR(255),
   TratamentoRecomendado VARCHAR(255),
   RemediosReceitados VARCHAR(255),
-   CONSTRAINT FK_Diagnostico_Consulta FOREIGN KEY (idCon) REFERENCES Consulta(Codigo)
+   CONSTRAINT FK_Diagnostico_Consulta FOREIGN KEY (idCon) REFERENCES Consulta(Codigo),
   CONSTRAINT FK_Diagnostico_Doenca FOREIGN KEY (IdDoenca) REFERENCES Doenca(IdDoenca)
 );
 
