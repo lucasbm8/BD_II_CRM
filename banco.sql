@@ -1,4 +1,4 @@
-CREATE DATABASE climed
+CREATE DATABASE clinicplus
     WITH
     OWNER = postgres
     ENCODING = 'UTF8'
@@ -7,7 +7,7 @@ CREATE DATABASE climed
     TABLESPACE = pg_default
     CONNECTION LIMIT = -1;
 
-USE climed;
+USE clinicplus;
 
 CREATE TABLE Paciente (
   CodigoP INT PRIMARY KEY,
