@@ -1,6 +1,5 @@
 # Ignorar arquivos/pastas comuns
 node_modules/
-.env
 TXTS/
 *.log
 dist/
