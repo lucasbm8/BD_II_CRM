@@ -750,8 +750,8 @@ export default class RegisterMedico extends Component {
                 <td>
                   {consulta.horainic} - {consulta.horafim}
                 </td>
-                <td>{consulta.paciente}</td>
-                <td>{consulta.medico}</td>
+                <td>{consulta.nome_paciente}</td>
+                <td>{consulta.nome_medico}</td>
                 <td>
                   R${" "}
                   {consulta.valorpago != null
