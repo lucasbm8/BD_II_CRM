@@ -73,7 +73,7 @@ CREATE TABLE Diagnostico (
   Observacoes VARCHAR(255),
   TratamentoRecomendado VARCHAR(255),
   RemediosReceitados VARCHAR(255),
-   CONSTRAINT FK_Diagnostico_Consulta FOREIGN KEY (idCon) REFERENCES Consulta(Codigo),
+  CONSTRAINT FK_Diagnostico_Consulta FOREIGN KEY (idCon) REFERENCES Consulta(Codigo),
   CONSTRAINT FK_Diagnostico_Doenca FOREIGN KEY (IdDoenca) REFERENCES Doenca(IdDoenca)
 );
 

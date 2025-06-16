@@ -41,7 +41,16 @@ exports.showAgendaPorCodigo = async (req, res) => {
 exports.agendar = async (req, res) => {
   try {
     const { dadosAgenda } = req.body;
-    const codigoConsulta = Math.floor(Math.random() * (10000 - 10 + 1)) + 10;
+
+    // Primeiro, consultamos o último código da tabela consulta
+    var ultimoCodigoResult = await db.query(
+      "SELECT MAX(codigo) as ultimo_codigo FROM consulta"
+    );
+
+    // Se não houver registros, começamos com 1, caso contrário incrementamos
+    const ultimoCodigo = ultimoCodigoResult.rows[0]?.ultimo_codigo || 0;
+    const codigoConsulta = ultimoCodigo + 1;
+
     console.log(dadosAgenda);
 
     if (
@@ -52,8 +61,9 @@ exports.agendar = async (req, res) => {
     ) {
       return res.status(400).send("Todos os campos são obrigatórios");
     }
+
     const response1 = await db.query(
-      "INSERT INTO  consulta  (codigo, horainic, horafim,data,idpaciente, idespecial,idmedico,valorpago, pagou, formapagamento) VALUES ($1, $2, $3, $4,$5,$6,$7,$8,$9, $10)",
+      "INSERT INTO consulta (codigo, horainic, horafim, data, idpaciente, idespecial, idmedico, valorpago, pagou, formapagamento) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
       [
         codigoConsulta,
         dadosAgenda.horainic,
@@ -69,7 +79,7 @@ exports.agendar = async (req, res) => {
     );
 
     const response2 = await db.query(
-      "INSERT INTO  agenda  (idagenda, horainicio, horafim,diasemana,idm) VALUES ($1, $2, $3, $4, $5)",
+      "INSERT INTO agenda (idagenda, horainicio, horafim, diasemana, idm) VALUES ($1, $2, $3, $4, $5)",
       [
         codigoConsulta,
         dadosAgenda.horainic,
@@ -85,7 +95,7 @@ exports.agendar = async (req, res) => {
     res.status(200).send({ codigoConsulta });
   } catch (error) {
     console.error("Erro ao agendar:", error);
-    res.status(500).send("Erro ao agendar ");
+    res.status(500).send("Erro ao agendar");
   }
 };
 
@@ -270,19 +280,24 @@ exports.updatePaciente = async (req, res) => {
 // DELETE - Deletar paciente
 exports.deletePaciente = async (req, res) => {
   const { codigop } = req.params;
+
   try {
-    await db.query("DELETE FROM consulta WHERE codigop = $1", [codigop]);
-    await db.query("DELETE FROM paciente WHERE codigop = $1", [codigop]);
-    return res.status(204).send();
-  } catch (error) {
-    if (error.code === "23503") {
-      return res
-        .status(400)
-        .send(
-          "Não é possível deletar o paciente porque ele possui consultas registradas."
-        );
+    // Primeiro remove as consultas relacionadas ao paciente
+    await db.query("DELETE FROM consulta WHERE idPaciente = $1", [codigop]);
+
+    // Depois remove o paciente
+    const deletePaciente = await db.query(
+      "DELETE FROM paciente WHERE codigop = $1",
+      [codigop]
+    );
+
+    if (deletePaciente.rowCount === 0) {
+      return res.status(404).send("Paciente não encontrado.");
     }
-    console.error(error);
+
+    return res.status(204).send(); // sucesso sem conteúdo
+  } catch (error) {
+    console.error("Erro ao deletar paciente:", error);
     return res.status(500).send("Erro ao deletar paciente");
   }
 };

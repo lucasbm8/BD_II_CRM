@@ -46,6 +46,7 @@ const initialState = {
   },
   filters: {
     codigo: "",
+    idpaciente: "",
     dataInicio: "",
     dataFim: "",
   },
@@ -127,14 +128,14 @@ export default class RegisterMedico extends Component {
           <div className="row">
             <div className="col-md-3">
               <div className="form-group">
-                <label>Código</label>
+                <label>ID do Paciente</label>
                 <input
                   type="text"
                   className="form-control"
-                  name="codigo"
-                  value={filters.codigo}
+                  name="idpaciente"
+                  value={filters.idpaciente}
                   onChange={this.handleFilterChange}
-                  placeholder="Código da consulta"
+                  placeholder="ID do paciente"
                 />
               </div>
             </div>
