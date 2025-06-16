@@ -10,6 +10,41 @@ exports.showMedicos = async (req, res) => {
   }
 };
 
+// POST - Adicionar medico
+exports.addMedico = async (req, res) => {
+  try {
+      const { dados } = req.body;
+
+
+    const response = await db.query(
+      `INSERT INTO medico (CRM, NOMEM, TELEFONE, PERCENTUAL)
+       VALUES ($1, $2, $3, $4)`,
+      [dados.crm, dados.name, dados.telefone, dados.percentual]
+    );
+
+    res.status(201).send(response.rows[0]);
+  } catch (error) {
+    console.error("Erro ao adicionar medico:", error);
+    res.status(500).send("Erro ao adicionar medico");
+  }
+};
+// POST - Adicionar medico
+exports.updateMedico = async (req, res) => {
+  try {
+      const { dados } = req.body;
+    const response = await db.query(
+      `update  medico set  NOMEM =$2,TELEFONE =$3, PERCENTUAL =$4
+      where CRM = $1`,
+      [dados.crm, dados.nomem, dados.telefone, dados.percentual]
+    );
+
+    res.status(201).send(response.rows[0]);
+  } catch (error) {
+    console.error("Erro ao adicionar medico:", error);
+    res.status(500).send("Erro ao adicionar medico");
+  }
+};
+
 exports.showAgendaPorMedicos = async (req, res) => {
   try {
     const { crm } = req.body;

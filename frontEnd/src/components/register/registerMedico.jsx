@@ -20,6 +20,7 @@ const initialState = {
   list: [],
   loading: false,
   error: null,
+  editar: false
 };
 
 export default class RegisterMedico extends Component {
@@ -57,40 +58,31 @@ export default class RegisterMedico extends Component {
     this.setState({ user: initialState.user });
   }
 
-  save() {
-    const user = this.state.user;
 
-    // Validação básica
-    if (!user.name || !user.crm) {
-      alert("Nome e CRM são obrigatórios!");
-      return;
+   save() {
+      const user = this.state.user;
+      const method = this.state.editar ? "put" : "post";
+       console.log("dados user")
+      console.log(user)
+       console.log(method)
+       const url = user.codigop ? `${baseUrl}/${user.codigop}` : baseUrl;
+
+   console.log(url)
+
+     axios({
+                 method: method,
+                 url: url,
+                 data: { dados: user } 
+             })
+          .then((resp) => {
+            const list = this.getUpdatedList(resp.data);
+            this.setState({ user: initialState.user, list });
+             this.loadMedicos() 
+                  this.setState({ editar: true });
+          })
+          .catch((err) => console.error("Erro ao salvar medico:", err));
     }
 
-    this.setState({ loading: true });
-
-    const method = user.id ? "put" : "post";
-    const url = user.id ? `${baseUrl}/${user.id}` : baseUrl;
-
-    axios[method](url, user)
-      .then((resp) => {
-        const list = this.getUpdatedList(resp.data);
-        this.setState({
-          user: initialState.user,
-          list,
-          loading: false,
-        });
-        alert(
-          user.id
-            ? "Médico atualizado com sucesso!"
-            : "Médico cadastrado com sucesso!"
-        );
-      })
-      .catch((error) => {
-        console.error("Erro ao salvar médico:", error);
-        this.setState({ loading: false });
-        alert("Erro ao salvar médico!");
-      });
-  }
 
   getUpdatedList(user, add = true) {
     const list = this.state.list.filter((u) => u.id !== user.id);
@@ -117,7 +109,7 @@ export default class RegisterMedico extends Component {
                 type="text"
                 className="form-control"
                 name="name"
-                value={user.name}
+                value={user.nomem}
                 onChange={(e) => this.updateField(e)}
                 placeholder="Digite o nome completo..."
                 disabled={loading}
@@ -213,6 +205,8 @@ export default class RegisterMedico extends Component {
   }
 
   load(user) {
+    console.log(user)
+      this.setState({ editar: true });
     this.setState({ user });
   }
 

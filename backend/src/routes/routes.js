@@ -3,6 +3,8 @@ const controller = require("../controllers/controller");
 
 // ROTAS ClinicPlus
 router.get("/medicos", controller.showMedicos);
+router.post("/medicos", controller.addMedico);
+router.put("/medicos", controller.updateMedico);
 //router.get("/paciente", controller.showPacientes);
 router.post("/agendaMedico", controller.showAgendaPorMedicos);
 router.post("/AgendaCodigo", controller.showAgendaPorCodigo);
