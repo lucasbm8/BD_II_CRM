@@ -11,7 +11,7 @@ const headerProps = {
 const baseUrl = "http://localhost:4040/paciente";
 const initialState = {
   user: {
-    codigopp: "",
+    codigop: "",
     cpf: "",
     nomep: "",
     endereco: "",
@@ -25,10 +25,10 @@ const initialState = {
 export default class RegisterPaciente extends Component {
   state = { ...initialState };
 
-  componentWillMount() {
-    axios(baseUrl).then((resp) => {
-      this.setState({ list: resp.data });
-    });
+  componentDidMount() {
+    axios(baseUrl)
+      .then((resp) => this.setState({ list: resp.data }))
+      .catch((err) => console.error("Erro ao buscar pacientes:", err));
   }
 
   clear() {
@@ -39,11 +39,15 @@ export default class RegisterPaciente extends Component {
     const user = this.state.user;
     const method = user.codigop ? "put" : "post";
     const url = user.codigop ? `${baseUrl}/${user.codigop}` : baseUrl;
-    axios[method](url, user).then((resp) => {
-      const list = this.getUpdatedList(resp.data);
-      this.setState({ user: initialState.user, list });
-    });
+
+    axios[method](url, user)
+      .then((resp) => {
+        const list = this.getUpdatedList(resp.data);
+        this.setState({ user: initialState.user, list });
+      })
+      .catch((err) => console.error("Erro ao salvar paciente:", err));
   }
+
   getUpdatedList(user, add = true) {
     const list = this.state.list.filter((u) => u.codigop !== user.codigop);
     if (add) list.unshift(user);
@@ -54,6 +58,20 @@ export default class RegisterPaciente extends Component {
     const user = { ...this.state.user };
     user[event.target.name] = event.target.value;
     this.setState({ user });
+  }
+
+  load(user) {
+    this.setState({ user });
+  }
+
+  remove(user) {
+    axios
+      .delete(`${baseUrl}/${user.codigop}`)
+      .then(() => {
+        const list = this.getUpdatedList(user, false);
+        this.setState({ list });
+      })
+      .catch((err) => console.error("Erro ao deletar paciente:", err));
   }
 
   renderForm() {
@@ -164,13 +182,12 @@ export default class RegisterPaciente extends Component {
         <hr />
         <div className="row">
           <div className="col-12 d-flex justify-content-end">
-            <button className="btn btn-primary" onClick={(e) => this.save(e)}>
-              Cadastrar
+            <button className="btn btn-primary" onClick={() => this.save()}>
+              {this.state.user.codigop ? "Atualizar" : "Cadastrar"}
             </button>
-
             <button
               className="btn btn-secondary ml-2"
-              onClick={(e) => this.clear(e)}
+              onClick={() => this.clear()}
             >
               Cancelar
             </button>
@@ -178,17 +195,6 @@ export default class RegisterPaciente extends Component {
         </div>
       </div>
     );
-  }
-
-  load(user) {
-    this.setState({ user });
-  }
-
-  remove(user) {
-    axios.delete(`${baseUrl}/${user.codigop}`).then(() => {
-      const list = this.getUpdatedList(user, false);
-      this.setState({ list });
-    });
   }
 
   renderTable() {
@@ -203,7 +209,7 @@ export default class RegisterPaciente extends Component {
             <th>Idade</th>
             <th>Sexo</th>
             <th>Telefone</th>
-            <th>Editar/Apagar</th>
+            <th>Ações</th>
           </tr>
         </thead>
         <tbody>{this.renderRows()}</tbody>

@@ -269,21 +269,21 @@ exports.updatePaciente = async (req, res) => {
 
 // DELETE - Deletar paciente
 exports.deletePaciente = async (req, res) => {
+  const { codigop } = req.params;
   try {
-    const { codigop } = req.params;
-
-    const result = await db.query("DELETE FROM paciente WHERE codigop = $1", [
-      codigop,
-    ]);
-
-    if (result.rowCount === 0) {
-      return res.status(404).send("Paciente não encontrado");
-    }
-
-    res.status(200).send();
+    await db.query("DELETE FROM consulta WHERE codigop = $1", [codigop]);
+    await db.query("DELETE FROM paciente WHERE codigop = $1", [codigop]);
+    return res.status(204).send();
   } catch (error) {
-    console.error("Erro ao deletar paciente:", error);
-    res.status(500).send();
+    if (error.code === "23503") {
+      return res
+        .status(400)
+        .send(
+          "Não é possível deletar o paciente porque ele possui consultas registradas."
+        );
+    }
+    console.error(error);
+    return res.status(500).send("Erro ao deletar paciente");
   }
 };
 

@@ -3,7 +3,7 @@ const controller = require("../controllers/controller");
 
 // ROTAS ClinicPlus
 router.get("/medicos", controller.showMedicos);
-router.get("/paciente", controller.showPacientes);
+//router.get("/paciente", controller.showPacientes);
 router.post("/agendaMedico", controller.showAgendaPorMedicos);
 router.post("/AgendaCodigo", controller.showAgendaPorCodigo);
 router.post("/agendarConsulta", controller.agendar);
@@ -16,10 +16,10 @@ router.put("/atualizarEspecialidade/:codigo", controller.updateEspecialidade);
 router.delete("/removerEspecialidade/:codigo", controller.deleteEspecialidade);
 
 //Rotas de pacientes
-router.get("/listarPacientes", controller.showPacientes);
-router.post("/cadastrarPaciente", controller.addPaciente);
-router.put("/atualizarPaciente/:codigop", controller.updatePaciente);
-router.delete("/removerPaciente/:codigop", controller.deletePaciente);
+router.get("/paciente", controller.showPacientes);
+router.post("/paciente", controller.addPaciente);
+router.put("/paciente/:codigop", controller.updatePaciente);
+router.delete("/paciente/:codigop", controller.deletePaciente);
 
 // Rotas de consultas
 router.get("/listarConsultas", controller.showConsultas);
