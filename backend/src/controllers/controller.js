@@ -449,3 +449,21 @@ exports.showConsultas = async (req, res) => {
     });
   }
 };
+
+//Explain consulta
+exports.explainConsulta = async (req, res) => {
+  const { where } = req.query;
+  const queryText = `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) SELECT * FROM consulta ${
+    where ? `WHERE ${where}` : ""
+  }`;
+
+  try {
+    const result = await db.query(queryText);
+    res.json({ plan: result.rows[0]["QUERY PLAN"][0] });
+  } catch (error) {
+    console.error("Erro EXPLAIN:", error);
+    res
+      .status(500)
+      .json({ error: "Erro ao executar EXPLAIN", details: error.message });
+  }
+};

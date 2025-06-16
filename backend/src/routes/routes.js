@@ -23,4 +23,6 @@ router.delete("/removerPaciente/:codigop", controller.deletePaciente);
 
 // Rotas de consultas
 router.get("/listarConsultas", controller.showConsultas);
+router.get("/benchmark/explain", controller.explainConsulta);
+
 module.exports = router;

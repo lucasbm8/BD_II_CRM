@@ -775,6 +775,60 @@ export default class RegisterMedico extends Component {
     );
   }
 
+  runBenchmark = async () => {
+    const where = this.state.benchmarkWhere;
+    try {
+      const response = await axios.get(`${baseUrl}benchmark/explain`, {
+        params: { where },
+      });
+      this.setState({ benchmarkPlan: response.data.plan });
+    } catch (err) {
+      alert("Erro ao executar EXPLAIN");
+    }
+  };
+
+  createIndex = async () => {
+    try {
+      await axios.post(`${baseUrl}benchmark/create-index`);
+      alert("Índice criado com sucesso.");
+    } catch (err) {
+      alert("Erro ao criar índice");
+    }
+  };
+
+  renderBenchmark() {
+    return (
+      <div className="card mt-5">
+        <div className="card-body">
+          <h5 className="card-title">Benchmark de Consulta SQL</h5>
+          <div className="form-group">
+            <label>Cláusula WHERE (ex: codigo = 30000)</label>
+            <input
+              type="text"
+              className="form-control"
+              value={this.state.benchmarkWhere}
+              onChange={(e) =>
+                this.setState({ benchmarkWhere: e.target.value })
+              }
+            />
+          </div>
+          <button className="btn btn-primary mr-2" onClick={this.runBenchmark}>
+            Executar EXPLAIN
+          </button>
+          <button className="btn btn-secondary" onClick={this.createIndex}>
+            Criar Índice em idmedico
+          </button>
+
+          {this.state.benchmarkPlan && (
+            <pre className="mt-3 bg-light p-3">
+              {JSON.stringify(this.state.benchmarkPlan, null, 2)}
+            </pre>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   render() {
     return (
       <Main {...headerProps}>
@@ -782,6 +836,7 @@ export default class RegisterMedico extends Component {
         {this.renderPageSizeSelector()}
         {this.renderConsultaTable()}
         {this.renderPagination()}
+        {this.renderBenchmark()}
       </Main>
     );
   }
