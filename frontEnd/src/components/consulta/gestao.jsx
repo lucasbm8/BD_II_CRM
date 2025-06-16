@@ -46,7 +46,7 @@ const initialState = {
   },
   filters: {
     codigo: "",
-    idpaciente: "",
+    nomePaciente: "",
     dataInicio: "",
     dataFim: "",
   },
@@ -102,7 +102,14 @@ export default class RegisterMedico extends Component {
   };
 
   applyFilters = () => {
-    this.loadConsultas(1); // Volta para a primeira página ao aplicar filtros
+
+  this.setState({
+         consultas: this.state.consultas.filter(x => x.nome_paciente === this.state.filters.nomePaciente),
+         }
+       );
+
+
+
   };
 
   resetFilters = () => {
@@ -128,14 +135,14 @@ export default class RegisterMedico extends Component {
           <div className="row">
             <div className="col-md-3">
               <div className="form-group">
-                <label>ID do Paciente</label>
+                <label>Nome do Paciente</label>
                 <input
                   type="text"
                   className="form-control"
-                  name="idpaciente"
-                  value={filters.idpaciente}
+                  name="nomePaciente"
+                  value={filters.nomePaciente}
                   onChange={this.handleFilterChange}
-                  placeholder="ID do paciente"
+                  placeholder="nome do paciente"
                 />
               </div>
             </div>
