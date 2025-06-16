@@ -357,4 +357,113 @@ exports.deletePaciente = async (req, res) => {
     console.error("Erro ao deletar paciente:", error);
     res.status(500).send();
   }
-};*/
+};
+
+//CONSULTAS 
+exports.showConsultas = async (req, res) => {
+  try {
+     const { page = 1, limit = 20 } = req.query; // Mudamos para 20 itens por página
+    const offset = (page - 1) * limit;
+
+    const query = `
+      SELECT c.*, m.nomem as nome_medico, p.nomep as nome_paciente, e.nomee as nome_especialidade
+      FROM consulta c
+      JOIN medico m ON c.idmedico = m.crm
+      JOIN paciente p ON c.idpaciente = p.codigop
+      JOIN especialidade e ON c.idespecial = e.codigo
+      ORDER BY c.codigo ASC  -- Ordenando por código ASCENDENTE
+      LIMIT $1 OFFSET $2
+    `;
+
+    const countQuery = `SELECT COUNT(*) FROM consulta`;
+    
+    const [consultas, total] = await Promise.all([
+      db.query(query, [limit, offset]),
+      db.query(countQuery)
+    ]);
+
+    res.status(200).json({
+      data: consultas.rows,
+      total: parseInt(total.rows[0].count),
+      page: parseInt(page),
+      totalPages: Math.ceil(total.rows[0].count / limit),
+      itemsPerPage: parseInt(limit)
+    });
+   // ... código existente ...
+
+    if (!consultas.rows || !total.rows) {
+      throw new Error('Dados não retornados corretamente');
+    }
+
+    
+  } catch (error) {
+    console.error("Erro ao buscar consultas:", error);
+    res.status(500).json({ 
+      error: "Erro ao buscar consultas",
+      details: error.message
+    });
+}};*/
+
+// No seu controller.js
+exports.showConsultas = async (req, res) => {
+  try {
+    // FORÇAR os parâmetros como números inteiros
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 20;
+    const offset = (page - 1) * limit;
+
+    // Query com LIMIT e OFFSET explícitos
+    const queryText = `
+      SELECT c.*, m.nomem as nome_medico, p.nomep as nome_paciente, e.nomee as nome_especialidade
+      FROM consulta c
+      JOIN medico m ON c.idmedico = m.crm
+      JOIN paciente p ON c.idpaciente = p.codigop
+      JOIN especialidade e ON c.idespecial = e.codigo
+      ORDER BY c.codigo ASC
+      LIMIT ${limit} OFFSET ${offset}  -- Método alternativo direto
+    `;
+
+    console.log("Query executada:", queryText); // Log crucial
+
+    const [consultas, total] = await Promise.all([
+      db.query(queryText),
+      db.query("SELECT COUNT(*) FROM consulta"),
+    ]);
+
+    res.status(200).json({
+      data: consultas.rows,
+      total: parseInt(total.rows[0].count, 10),
+      page,
+      totalPages: Math.ceil(total.rows[0].count / limit),
+      itemsPerPage: limit,
+    });
+  } catch (error) {
+    console.error("Erro completo:", {
+      message: error.message,
+      stack: error.stack,
+      query: queryText, // Mostra a query que falhou
+    });
+    res.status(500).json({
+      error: "Erro ao buscar consultas",
+      details: error.message,
+    });
+  }
+};
+
+//Explain consulta
+exports.explainConsulta = async (req, res) => {
+  const { where } = req.query;
+  const queryText = `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) SELECT * FROM consulta ${
+    where ? `WHERE ${where}` : ""
+  }`;
+
+  try {
+    const result = await db.query(queryText);
+    res.json({ plan: result.rows[0]["QUERY PLAN"][0] });
+  } catch (error) {
+    console.error("Erro EXPLAIN:", error);
+    res
+      .status(500)
+      .json({ error: "Erro ao executar EXPLAIN", details: error.message });
+  }
+};
