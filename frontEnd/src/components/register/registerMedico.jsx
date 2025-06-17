@@ -183,8 +183,8 @@ export default class RegisterMedico extends Component {
               <input
                 type="text"
                 className="form-control"
-                name="especialidade"
-                value={user.especialidade}
+                name="especialidade" // <-- Nome correto
+                value={user.especialidade} // <-- Valor correto
                 onChange={(e) => this.updateField(e)}
                 placeholder="Digite o código da especialidade..."
                 disabled={loading}

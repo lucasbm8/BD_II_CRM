@@ -1,7 +1,6 @@
 const db = require("../config/database");
 
-// controller.js
-
+//GET - Exibir todos os médicos
 exports.showMedicos = async (req, res) => {
   try {
     const query = `
@@ -30,6 +29,7 @@ exports.showMedicos = async (req, res) => {
     res.status(500).send("Erro ao buscar medicos");
   }
 };
+
 // POST - Adicionar medico
 // FUNÇÃO ATUALIZADA - Adicionar Médico
 exports.addMedico = async (req, res) => {
@@ -82,46 +82,200 @@ exports.addMedico = async (req, res) => {
   }
 };
 
-// FUNÇÃO ATUALIZADA - Atualizar Médico
+/**
+ * PUT - Atualiza os dados de um médico existente.
+ * Permite a atualização do próprio CRM e agora, também da especialidade.
+ * Utiliza uma transação para garantir a atomicidade.
+ */
 exports.updateMedico = async (req, res) => {
-  // O CRM original vem dos parâmetros da URL (ex: /medicos/102)
   const originalCrm = req.params.crm;
+  // Desestruturar todos os campos, incluindo a 'especialidade'
+  const {
+    crm: novoCrm,
+    nomem,
+    telefone,
+    percentual,
+    especialidade,
+  } = req.body.dados;
 
-  // Os novos dados (incluindo o novo CRM) vêm do corpo da requisição
-  const { crm: novoCrm, nomem, telefone, percentual } = req.body.dados;
+  const client = await db.connect(); // Inicia uma transação
 
   try {
-    const response = await db.query(
-      `-- A query agora atualiza o próprio CRM
-       UPDATE medico 
-       SET 
-         crm = $1,          -- O novo CRM
-         nomem = $2, 
-         telefone = $3, 
-         percentual = $4
-       WHERE 
-         crm = $5;          -- Condição com o CRM original
-      `,
-      [novoCrm, nomem, telefone, percentual, originalCrm] // A ordem dos parâmetros deve bater com a query
+    await client.query("BEGIN"); // Inicia a transação
+
+    // 1. Atualiza na tabela Medico (permitindo a mudança de CRM)
+    const medicoUpdateQuery = `
+      UPDATE medico 
+      SET 
+        crm = $1,          
+        nomem = $2, 
+        telefone = $3, 
+        percentual = $4
+      WHERE 
+        crm = $5
+      RETURNING *;
+    `;
+    const medicoUpdateValues = [
+      novoCrm,
+      nomem,
+      telefone,
+      percentual,
+      originalCrm,
+    ];
+    const responseMedico = await client.query(
+      medicoUpdateQuery,
+      medicoUpdateValues
     );
 
-    if (response.rowCount === 0) {
+    if (responseMedico.rowCount === 0) {
+      await client.query("ROLLBACK"); // Se o médico não foi encontrado, desfaz a transação
       return res
         .status(404)
         .send({ message: "Médico não encontrado com o CRM original." });
     }
 
-    // Retorna o objeto com os dados já atualizados
-    res.status(200).send({ crm: novoCrm, nomem, telefone, percentual });
+    // 2. Atualiza a especialidade na tabela ExerceEsp
+    // Primeiro, deleta a especialidade antiga (um médico pode ter apenas 1 por essa estrutura)
+    // Se um médico puder ter múltiplas especialidades, a lógica seria mais complexa (UPDATE ou INSERT/DELETE seletivos)
+    // Assumindo que um médico tem apenas uma especialidade principal para simplificar a atualização.
+    // Se ExerceEsp for N:N e um médico puder ter várias especialidades, a lógica precisaria ser mais sofisticada
+    // para adicionar/remover especialidades específicas, não apenas substituir.
+
+    // No seu DB, ExerceEsp é (idMedico, idEspecial), que pode implicar N:N.
+    // Se for N:N, um UPDATE simples não funciona. Precisamos DELETAR e INSERIR.
+    // Assumindo por enquanto que você só quer "mudar" a especialidade principal ou vincular uma.
+
+    // Deleta a especialidade antiga (se existir) para este médico
+    await client.query(
+      "DELETE FROM ExerceEsp WHERE idMedico = $1;",
+      [novoCrm] // Usa o novo CRM, caso ele tenha mudado
+    );
+
+    // Insere a nova especialidade.
+    // É importante que 'especialidade' tenha um valor válido (Código da Especialidade).
+    if (especialidade) {
+      await client.query(
+        "INSERT INTO ExerceEsp (idMedico, idEspecial) VALUES ($1, $2);",
+        [novoCrm, especialidade] // Usa o novo CRM e a nova especialidade
+      );
+    }
+
+    await client.query("COMMIT"); // Finaliza a transação
+    res.status(200).send(responseMedico.rows[0]); // Retorna o médico atualizado
   } catch (error) {
-    console.error("Erro ao atualizar medico:", error);
-    // Erro comum se o novo CRM já existir
+    await client.query("ROLLBACK"); // Desfaz a transação em caso de erro
+    console.error("Erro ao atualizar médico:", error);
     if (error.code === "23505") {
       return res
         .status(409)
         .send({ message: "O novo CRM informado já pertence a outro médico." });
     }
-    res.status(500).send("Erro ao atualizar medico");
+    // Adicione tratamento para erros de chave estrangeira (se a especialidade não existe)
+    if (
+      error.code === "23503" &&
+      error.constraint === "fk_especialidade_medico_especialidade"
+    ) {
+      return res
+        .status(400)
+        .send({ message: "A Especialidade informada não existe." });
+    }
+    res
+      .status(500)
+      .send({
+        message: "Erro interno ao atualizar médico.",
+        details: error.message,
+      });
+  } finally {
+    client.release();
+  }
+};
+// DELETE - Deletar médico (com transação para manter integridade)
+exports.deleteMedico = async (req, res) => {
+  const { crm } = req.params;
+  const client = await db.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    // 1. Deletar registros em 'diagnostica' relacionados a consultas do médico
+    await client.query(
+      `
+      DELETE FROM diagnostica
+      WHERE idDiagn IN (
+          SELECT IdDiagnostico
+          FROM Diagnostico
+          WHERE idCon IN (
+              SELECT Codigo FROM Consulta WHERE idMedico = $1
+          )
+      );
+      `,
+      [crm]
+    );
+
+    // 2. Deletar registros em 'Diagnostico' relacionados a consultas do médico
+    await client.query(
+      `
+      DELETE FROM Diagnostico
+      WHERE idCon IN (
+          SELECT Codigo FROM Consulta WHERE idMedico = $1
+      );
+      `,
+      [crm]
+    );
+
+    // 3. Deletar registros em 'Consulta' que fazem referência ao médico
+    await client.query(
+      `
+      DELETE FROM Consulta
+      WHERE idMedico = $1;
+      `,
+      [crm]
+    );
+
+    // 4. Deletar registros em 'Agenda' que fazem referência ao médico
+    await client.query(
+      `
+      DELETE FROM Agenda
+      WHERE idM = $1;
+      `,
+      [crm]
+    );
+
+    // 5. Deletar registros em 'ExerceEsp' que fazem referência ao médico
+    await client.query(
+      `
+      DELETE FROM ExerceEsp
+      WHERE idMedico = $1;
+      `,
+      [crm]
+    );
+
+    // 6. Finalmente, deletar o médico da tabela 'Medico'
+    const result = await client.query(
+      `
+      DELETE FROM Medico
+      WHERE CRM = $1
+      RETURNING *;
+      `,
+      [crm]
+    );
+
+    if (result.rowCount === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).send({ message: "Médico não encontrado." });
+    }
+
+    await client.query("COMMIT");
+    res.status(200).send({ message: "Médico deletado com sucesso!" });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Erro ao deletar médico:", error);
+    res.status(500).send({
+      message: "Erro interno ao deletar médico.",
+      details: error.message,
+    });
+  } finally {
+    client.release();
   }
 };
 
@@ -449,6 +603,7 @@ exports.deleteConsulta = async (req, res) => {
   }
 };
 
+//Funções pacientes
 // GET - Exibir todos os pacientes
 exports.showPacientes = async (req, res) => {
   try {
@@ -542,124 +697,7 @@ exports.deletePaciente = async (req, res) => {
   }
 };
 
-/*
-// PACIENTES
-exports.showPacientes = async (req, res) => {
-  try {
-    const response = await db.query("SELECT * FROM Paciente ORDER BY nomep");
-    res.status(200).send(response.rows);
-  } catch (error) {
-    console.error("Erro ao buscar pacientes:", error);
-    res.status(500).send("Erro ao buscar pacientes");
-  }
-};
-
-exports.addPaciente = async (req, res) => {
-  try {
-    const { codigo, cpf, nomep, endereco, idade, sexo, telefone } = req.body;
-
-    if (
-      !codigo ||
-      !cpf ||
-      !nomep ||
-      !endereco ||
-      !idade ||
-      !sexo ||
-      !telefone
-    ) {
-      return res.status(400).send("Todos os campos são obrigatórios");
-    }
-
-    const response = await db.query(
-      "INSERT INTO Paciente (CodigoP, CPF, NomeP, Endereco, Idade, Sexo, Telefone) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
-      [codigo, cpf, nomep, endereco, idade, sexo, telefone]
-    );
-
-    res.status(201).send(response.rows[0]);
-  } catch (error) {
-    console.error("Erro ao adicionar paciente:", error);
-    res.status(500).send("Erro ao adicionar paciente");
-  }
-};
-
-exports.updatePaciente = async (req, res) => {
-  try {
-    const { codigo } = req.params;
-    const { cpf, nomep, endereco, idade, sexo, telefone } = req.body;
-
-    const response = await db.query(
-      "UPDATE Paciente SET CPF = $1, NomeP = $2, Endereco = $3, Idade = $4, Sexo = $5, Telefone = $6 WHERE CodigoP = $7 RETURNING *",
-      [cpf, nomep, endereco, idade, sexo, telefone, codigo]
-    );
-
-    if (response.rowCount === 0) {
-      return res.status(404).send("Paciente não encontrado");
-    }
-
-    res.status(200).send(response.rows[0]);
-  } catch (error) {
-    console.error("Erro ao atualizar paciente:", error);
-    res.status(500).send("Erro ao atualizar paciente");
-  }
-};
-
-exports.deletePaciente = async (req, res) => {
-  try {
-    const { codigo } = req.params;
-    await db.query("DELETE FROM Paciente WHERE CodigoP = $1", [codigo]);
-    res.status(200).send();
-  } catch (error) {
-    console.error("Erro ao deletar paciente:", error);
-    res.status(500).send();
-  }
-};
-
-//CONSULTAS 
-exports.showConsultas = async (req, res) => {
-  try {
-     const { page = 1, limit = 20 } = req.query; // Mudamos para 20 itens por página
-    const offset = (page - 1) * limit;
-
-    const query = `
-      SELECT c.*, m.nomem as nome_medico, p.nomep as nome_paciente, e.nomee as nome_especialidade
-      FROM consulta c
-      JOIN medico m ON c.idmedico = m.crm
-      JOIN paciente p ON c.idpaciente = p.codigop
-      JOIN especialidade e ON c.idespecial = e.codigo
-      ORDER BY c.codigo ASC  -- Ordenando por código ASCENDENTE
-      LIMIT $1 OFFSET $2
-    `;
-
-    const countQuery = `SELECT COUNT(*) FROM consulta`;
-    
-    const [consultas, total] = await Promise.all([
-      db.query(query, [limit, offset]),
-      db.query(countQuery)
-    ]);
-
-    res.status(200).json({
-      data: consultas.rows,
-      total: parseInt(total.rows[0].count),
-      page: parseInt(page),
-      totalPages: Math.ceil(total.rows[0].count / limit),
-      itemsPerPage: parseInt(limit)
-    });
-   // ... código existente ...
-
-    if (!consultas.rows || !total.rows) {
-      throw new Error('Dados não retornados corretamente');
-    }
-
-    
-  } catch (error) {
-    console.error("Erro ao buscar consultas:", error);
-    res.status(500).json({ 
-      error: "Erro ao buscar consultas",
-      details: error.message
-    });
-}};*/
-
-// No seu controller.js
+//Consultas detalhadas
 exports.showConsultas = async (req, res) => {
   try {
     // FORÇAR os parâmetros como números inteiros
@@ -705,7 +743,6 @@ exports.showConsultas = async (req, res) => {
   }
 };
 
-//Explain consulta
 exports.explainConsulta = async (req, res) => {
   const { where } = req.query;
   const queryText = `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) SELECT * FROM consulta ${

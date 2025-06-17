@@ -2,10 +2,17 @@ const router = require("express-promise-router")();
 const controller = require("../controllers/controller");
 
 // ROTAS ClinicPlus
-//Rotas para Registro de Médicos
+// GET: Lista todos os médicos e suas especialidades
 router.get("/medicos", controller.showMedicos);
+
+// POST: Adiciona um novo médico e sua especialidade
 router.post("/medicos", controller.addMedico);
+
+// PUT: Atualiza um médico existente (CRM no parâmetro da URL)
 router.put("/medicos/:crm", controller.updateMedico);
+
+// DELETE: Deleta um médico e suas referências em tabelas filhas (CRM no parâmetro da URL)
+router.delete("/medicos/:crm", controller.deleteMedico);
 
 //router.get("/paciente", controller.showPacientes);
 router.post("/agendaMedico", controller.showAgendaPorMedicos);
