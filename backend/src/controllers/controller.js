@@ -1,9 +1,18 @@
 const db = require("../config/database");
 
-//GET - Exibir todos os médicos
+/**
+ * GET - Lista todos os médicos, incluindo suas especialidades, com suporte a paginação,
+ * ordenados do CRM maior para o menor.
+ * @param {object} req.query - Parâmetros de query para paginação (page, limit)
+ */
 exports.showMedicos = async (req, res) => {
   try {
-    const query = `
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10; // Padrão 10 itens por página
+    const offset = (page - 1) * limit;
+
+    // Query para buscar os médicos com paginação e suas especialidades
+    const doctorsQuery = `
       SELECT 
         m.crm, 
         m.nomem, 
@@ -19,17 +28,34 @@ exports.showMedicos = async (req, res) => {
       GROUP BY 
         m.crm, m.nomem, m.telefone, m.percentual
       ORDER BY
-        m.crm DESC; -- AQUI ESTÁ A MUDANÇA: Ordena por CRM do maior para o menor
+        m.crm DESC -- ALTERADO: Ordena por CRM (código do médico) DESCENDENTE
+      LIMIT $1 OFFSET $2;
+    `;
+    // Query para contar o total de médicos (sem paginação)
+    const countQuery = `
+      SELECT COUNT(*) FROM medico;
     `;
 
-    const response = await db.query(query);
-    res.status(200).send(response.rows);
+    const [doctorsResult, totalResult] = await Promise.all([
+      db.query(doctorsQuery, [limit, offset]),
+      db.query(countQuery),
+    ]);
+
+    const totalItems = parseInt(totalResult.rows[0].count, 10);
+    const totalPages = Math.ceil(totalItems / limit);
+
+    res.status(200).json({
+      data: doctorsResult.rows,
+      total: totalItems,
+      page: page,
+      totalPages: totalPages,
+      itemsPerPage: limit,
+    });
   } catch (error) {
-    console.error("Erro ao buscar medicos:", error);
-    res.status(500).send("Erro ao buscar medicos");
+    console.error("Erro ao buscar médicos com paginação:", error);
+    res.status(500).send("Erro ao buscar médicos");
   }
 };
-
 // POST - Adicionar medico
 // FUNÇÃO ATUALIZADA - Adicionar Médico
 exports.addMedico = async (req, res) => {
