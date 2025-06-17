@@ -379,6 +379,76 @@ exports.deleteEspecialidade = async (req, res) => {
   }
 };
 
+//DELETE - Deletar consulta
+exports.deleteConsulta = async (req, res) => {
+  const { codigo } = req.params; // O código da consulta virá da URL
+
+  const client = await db.connect(); // Inicia uma transação para garantir a atomicidade
+
+  try {
+    await client.query("BEGIN"); // Inicia a transação
+
+    // 1. Excluir registros na tabela 'diagnostica' que se referem a diagnósticos desta consulta
+    await client.query(
+      `
+      DELETE FROM diagnostica
+      WHERE idDiagn IN (
+          SELECT IdDiagnostico
+          FROM Diagnostico
+          WHERE idCon = $1
+      );
+      `,
+      [codigo]
+    );
+
+    // 2. Excluir registros na tabela 'Diagnostico' que se referem a esta consulta
+    await client.query(
+      `
+      DELETE FROM Diagnostico
+      WHERE idCon = $1;
+      `,
+      [codigo]
+    );
+
+    // 3. Excluir o registro da agenda (se houver, com base no idagenda sendo o mesmo código da consulta)
+    await client.query(
+      `
+      DELETE FROM Agenda
+      WHERE IdAgenda = $1;
+      `,
+      [codigo]
+    );
+
+    // 4. Excluir a consulta da tabela 'Consulta'
+    const result = await client.query(
+      `
+      DELETE FROM Consulta
+      WHERE Codigo = $1
+      RETURNING *; -- Opcional: para retornar a consulta deletada
+      `,
+      [codigo]
+    );
+
+    if (result.rowCount === 0) {
+      await client.query("ROLLBACK"); // Se a consulta não foi encontrada, desfaz
+      return res.status(404).send({ message: "Consulta não encontrada." });
+    }
+
+    await client.query("COMMIT"); // Finaliza a transação
+
+    res.status(200).send({ message: "Consulta deletada com sucesso!" }); // Status 200 OK
+  } catch (error) {
+    await client.query("ROLLBACK"); // Em caso de erro, desfaz todas as operações
+    console.error("Erro ao deletar consulta:", error);
+    res.status(500).send({
+      message: "Erro interno ao deletar consulta.",
+      details: error.message,
+    });
+  } finally {
+    client.release(); // Libera o cliente de volta para o pool
+  }
+};
+
 // GET - Exibir todos os pacientes
 exports.showPacientes = async (req, res) => {
   try {

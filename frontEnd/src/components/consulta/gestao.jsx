@@ -111,6 +111,30 @@ export default class RegisterMedico extends Component {
     }));
   };
 
+  // Nova função para deletar consulta
+  handleDeleteConsulta = async (codigoConsulta) => {
+    if (
+      !window.confirm(
+        `Tem certeza que deseja excluir a consulta ${codigoConsulta}?`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await axios.delete(`${baseUrl}deletarConsulta/${codigoConsulta}`);
+      alert("Consulta excluída com sucesso!");
+      this.loadConsultas(this.state.pagination.currentPage); // Recarregar a página atual
+    } catch (error) {
+      console.error("Erro ao deletar consulta:", error);
+      const errorMessage =
+        error.response && error.response.data && error.response.data.message
+          ? error.response.data.message
+          : "Erro ao deletar consulta. Verifique o console para detalhes.";
+      alert(errorMessage);
+    }
+  };
+
   applyFilters = () => {
     this.loadConsultas(1); // Recarregar da primeira página com filtros
   };
@@ -708,11 +732,17 @@ export default class RegisterMedico extends Component {
                 </td>
                 <td>
                   <button
-                    className="btn btn-sm btn-primary"
+                    className="btn btn-sm btn-primary mr-2" // Adicionado mr-2 para espaçamento
                     onClick={() => this.handleEdit(consulta)}
-                    disabled={this.state.agendaOpen} // Desabilita se já estiver editando
+                    disabled={this.state.agendaOpen}
                   >
                     <i className="fa fa-edit"></i> Editar
+                  </button>
+                  <button
+                    className="btn btn-sm btn-danger" // Botão de deletar
+                    onClick={() => this.handleDeleteConsulta(consulta.codigo)}
+                  >
+                    <i className="fa fa-trash"></i> Deletar
                   </button>
                 </td>
               </tr>

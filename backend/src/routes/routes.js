@@ -12,6 +12,7 @@ router.post("/agendaMedico", controller.showAgendaPorMedicos);
 router.post("/AgendaCodigo", controller.showAgendaPorCodigo);
 router.post("/agendarConsulta", controller.agendar);
 router.post("/atualizarDados", controller.atualizarAgenda);
+router.delete("/deletarConsulta/:codigo", controller.deleteConsulta);
 
 // ROTAS DE ESPECIALIDADES (VERIFIQUE OS NOMES EXATOS NO CONTROLLER)
 router.get("/listarEspecialidades", controller.showEspecialidades);
