@@ -3,37 +3,75 @@ import axios from "axios";
 import Main from "../template/Main";
 
 const headerProps = {
-  icon: "tags", // Ícone mais adequado para especialidades
+  icon: "tags",
   title: "Cadastros",
   subtitle: "Tela de cadastro de Especialidades",
 };
 
-// Base URL para as operações de especialidade, conforme o routes.js
 const baseUrl = "http://localhost:4040/especialidades";
 
 const initialState = {
-  // Ajustado para refletir os campos exatos do banco de dados (nomee)
   user: { codigo: "", nomee: "", indice: "" },
   list: [],
-  loading: false, // Novo estado para controle de carregamento
-  isEditing: false, // Novo estado para controlar o modo de edição (cadastrar/atualizar)
+  loading: false,
+  isEditing: false,
+  // NOVA LÓGICA: Paginação
+  pagination: {
+    currentPage: 1,
+    itemsPerPage: 10, // Default 10 itens por página
+    totalItems: 0,
+    totalPages: 1,
+  },
+  // NOVA LÓGICA: Para exibir tempos de benchmark
+  benchmarkTimes: {
+    paginatedLoad: null,
+    fullLoad: null,
+  },
 };
 
 export default class RegisterEspecialidade extends Component {
-  // Renomeado para clareza
   state = { ...initialState };
 
   componentDidMount() {
-    this.loadEspecialidades();
+    this.loadEspecialidades(); // Carrega a primeira página por padrão
   }
 
-  loadEspecialidades = async () => {
-    // Usar arrow function para binding automático
-    this.setState({ loading: true });
+  // NOVA LÓGICA: Função para carregar especialidades com paginação
+  loadEspecialidades = async (page = this.state.pagination.currentPage) => {
+    this.setState({
+      loading: true,
+      benchmarkTimes: {
+        ...this.state.benchmarkTimes,
+        paginatedLoad: null,
+        fullLoad: null,
+      },
+    });
+
     try {
-      // Usar baseUrl diretamente, já que /especialidades é a raiz das operações
-      const response = await axios.get(baseUrl);
-      this.setState({ list: response.data, loading: false });
+      const { itemsPerPage } = this.state.pagination;
+      const startTime = performance.now(); // Início da medição
+      const response = await axios.get(baseUrl, {
+        params: {
+          page,
+          limit: itemsPerPage,
+        },
+      });
+      const endTime = performance.now(); // Fim da medição
+
+      this.setState({
+        list: response.data.data,
+        pagination: {
+          currentPage: response.data.page,
+          itemsPerPage: response.data.itemsPerPage,
+          totalItems: response.data.total,
+          totalPages: response.data.totalPages,
+        },
+        loading: false,
+        benchmarkTimes: {
+          ...this.state.benchmarkTimes,
+          paginatedLoad: `${(endTime - startTime).toFixed(2)} ms`, // Tempo de carregamento paginado
+        },
+      });
     } catch (error) {
       console.error("Erro ao carregar especialidades:", error);
       alert(
@@ -43,9 +81,49 @@ export default class RegisterEspecialidade extends Component {
     }
   };
 
+  // NOVA LÓGICA: Função para carregar todas as especialidades (para benchmark de comparação)
+  loadAllEspecialidadesForBenchmark = async () => {
+    this.setState({
+      loading: true,
+      benchmarkTimes: {
+        ...this.state.benchmarkTimes,
+        paginatedLoad: null,
+        fullLoad: null,
+      },
+    });
+    try {
+      const startTime = performance.now(); // Início da medição
+      const response = await axios.get(baseUrl, { params: { limit: 999999 } }); // Limite bem alto
+      const endTime = performance.now(); // Fim da medição
+
+      console.log(
+        `Carregamento COMPLETO para benchmark: ${
+          response.data.data.length
+        } especialidades em ${(endTime - startTime).toFixed(2)} ms`
+      );
+
+      this.setState({
+        loading: false,
+        benchmarkTimes: {
+          ...this.state.benchmarkTimes,
+          fullLoad: `${(endTime - startTime).toFixed(2)} ms`, // Tempo de carregamento completo
+        },
+      });
+      alert(
+        "Carregamento completo para benchmark concluído. Verifique os tempos de benchmark abaixo."
+      );
+    } catch (error) {
+      console.error(
+        "Erro ao carregar todas as especialidades para benchmark:",
+        error
+      );
+      alert("Erro ao carregar todas as especialidades para benchmark.");
+      this.setState({ loading: false });
+    }
+  };
+
   clear = () => {
-    // Usar arrow function para binding automático
-    this.setState({ user: initialState.user, isEditing: false }); // Resetar isEditing
+    this.setState({ user: initialState.user, isEditing: false });
   };
 
   save = async () => {
@@ -77,16 +155,14 @@ export default class RegisterEspecialidade extends Component {
         } com sucesso!`
       );
 
-      this.loadEspecialidades();
-      this.clear();
+      this.clear(); // Limpa o formulário e reseta o modo de edição
+      this.loadEspecialidades(this.state.pagination.currentPage); // Recarrega a lista após salvar
     } catch (error) {
       console.error(
         "Erro ao salvar especialidade:",
-        // ALTERAÇÃO AQUI: Substitua 'error.response?.data' por 'error.response && error.response.data'
         (error.response && error.response.data) || error.message
       );
       const errorMessage =
-        // ALTERAÇÃO AQUI: Substitua 'error.response?.data?.message' por 'error.response && error.response.data && error.response.data.message'
         (error.response &&
           error.response.data &&
           error.response.data.message) ||
@@ -95,19 +171,13 @@ export default class RegisterEspecialidade extends Component {
     }
   };
 
-  // getUpdatedList não é mais necessário, pois loadEspecialidades recarrega a lista
-
   updateField = (event) => {
-    // Usar arrow function
     const user = { ...this.state.user };
     user[event.target.name] = event.target.value;
     this.setState({ user });
   };
 
-  // MUDANÇA CRÍTICA: Define isEditing para true quando uma especialidade é carregada para edição
   load = (especialidade) => {
-    // Usar arrow function
-    // Cria uma cópia do objeto para evitar mutação direta e garante que 'name' seja 'nomee'
     this.setState({
       user: { ...especialidade, name: especialidade.nomee },
       isEditing: true,
@@ -125,15 +195,13 @@ export default class RegisterEspecialidade extends Component {
     try {
       await axios.delete(`${baseUrl}/${especialidade.codigo}`);
       alert("Especialidade excluída com sucesso!");
-      this.loadEspecialidades();
+      this.loadEspecialidades(this.state.pagination.currentPage); // Recarrega a lista após a exclusão
     } catch (error) {
       console.error(
         "Erro ao deletar especialidade:",
-        // ALTERAÇÃO AQUI: Substitua 'error.response?.data' por 'error.response && error.response.data'
         (error.response && error.response.data) || error.message
       );
       const errorMessage =
-        // ALTERAÇÃO AQUI: Substitua 'error.response?.data?.message' por 'error.response && error.response.data && error.response.data.message'
         (error.response &&
           error.response.data &&
           error.response.data.message) ||
@@ -150,7 +218,7 @@ export default class RegisterEspecialidade extends Component {
             <div className="form-group">
               <label>Código</label>
               <input
-                type="number" // Mudar para number para consistência com o DB
+                type="number"
                 className="form-control"
                 name="codigo"
                 value={this.state.user.codigo}
@@ -167,7 +235,7 @@ export default class RegisterEspecialidade extends Component {
               <input
                 type="text"
                 className="form-control"
-                name="nomee" // MUDANÇA: 'name' para 'nomee' para refletir o DB
+                name="nomee"
                 value={this.state.user.nomee}
                 onChange={this.updateField}
                 placeholder="Digite o nome..."
@@ -179,7 +247,7 @@ export default class RegisterEspecialidade extends Component {
             <div className="form-group">
               <label>Índice</label>
               <input
-                type="number" // Mudar para number para consistência
+                type="number"
                 className="form-control"
                 name="indice"
                 value={this.state.user.indice}
@@ -194,8 +262,7 @@ export default class RegisterEspecialidade extends Component {
         <div className="row">
           <div className="col-12 d-flex justify-content-end">
             <button className="btn btn-primary" onClick={this.save}>
-              {this.state.isEditing ? "Atualizar" : "Cadastrar"}{" "}
-              {/* Texto dinâmico */}
+              {this.state.isEditing ? "Atualizar" : "Cadastrar"}
             </button>
 
             <button className="btn btn-secondary ml-2" onClick={this.clear}>
@@ -233,10 +300,10 @@ export default class RegisterEspecialidade extends Component {
       <table className="table mt-4">
         <thead>
           <tr>
-            <th>Código</th> {/* Mudado de ID para Código */}
+            <th>Código</th>
             <th>Nome</th>
             <th>Índice</th>
-            <th>Ações</th> {/* Mudado de Editar/Apagar para Ações */}
+            <th>Ações</th>
           </tr>
         </thead>
         <tbody>{this.renderRows()}</tbody>
@@ -248,10 +315,8 @@ export default class RegisterEspecialidade extends Component {
     return this.state.list.map((especialidade) => {
       return (
         <tr key={especialidade.codigo}>
-          {" "}
-          {/* Usar especialidade.codigo como key */}
           <td>{especialidade.codigo}</td>
-          <td>{especialidade.nomee}</td> {/* Campo do banco é 'nomee' */}
+          <td>{especialidade.nomee}</td>
           <td>{especialidade.indice}</td>
           <td>
             <button
@@ -272,11 +337,182 @@ export default class RegisterEspecialidade extends Component {
     });
   }
 
+  // NOVA LÓGICA: Função para renderizar o seletor de itens por página
+  renderPageSizeSelector() {
+    const pageSizes = [5, 10, 20, 50];
+    const { itemsPerPage } = this.state.pagination;
+
+    return (
+      <div className="mb-3 d-flex align-items-center">
+        <label className="mr-2 mb-0">Itens por página:</label>
+        <select
+          className="form-control form-control-sm w-auto"
+          value={itemsPerPage}
+          onChange={(e) => {
+            this.setState(
+              (prevState) => ({
+                pagination: {
+                  ...prevState.pagination,
+                  itemsPerPage: parseInt(e.target.value, 10),
+                  currentPage: 1, // Volta para a primeira página ao mudar o tamanho
+                },
+              }),
+              () => this.loadEspecialidades(1) // Recarrega com a nova configuração
+            );
+          }}
+        >
+          {pageSizes.map((size) => (
+            <option key={size} value={size}>
+              {size}
+            </option>
+          ))}
+        </select>
+      </div>
+    );
+  }
+
+  // NOVA LÓGICA: Função para renderizar a navegação da paginação
+  renderPagination() {
+    const { pagination } = this.state;
+    const { currentPage, totalPages } = pagination;
+
+    if (totalPages <= 1) return null;
+
+    const pageNumbers = [];
+    const maxVisiblePages = 5;
+
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+    if (endPage - startPage + 1 < maxVisiblePages) {
+      startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pageNumbers.push(i);
+    }
+
+    return (
+      <nav aria-label="Navegação de páginas">
+        <ul className="pagination justify-content-center mt-4">
+          <li className={`page-item ${currentPage === 1 ? "disabled" : ""}`}>
+            <button
+              className="page-link"
+              onClick={() => this.loadEspecialidades(1)}
+            >
+              Primeira
+            </button>
+          </li>
+          <li className={`page-item ${currentPage === 1 ? "disabled" : ""}`}>
+            <button
+              className="page-link"
+              onClick={() => this.loadEspecialidades(currentPage - 1)}
+            >
+              Anterior
+            </button>
+          </li>
+
+          {pageNumbers.map((number) => (
+            <li
+              key={number}
+              className={`page-item ${currentPage === number ? "active" : ""}`}
+            >
+              <button
+                className="page-link"
+                onClick={() => this.loadEspecialidades(number)}
+              >
+                {number}
+              </button>
+            </li>
+          ))}
+
+          <li
+            className={`page-item ${
+              currentPage === totalPages ? "disabled" : ""
+            }`}
+          >
+            <button
+              className="page-link"
+              onClick={() => this.loadEspecialidades(currentPage + 1)}
+            >
+              Próxima
+            </button>
+          </li>
+          <li
+            className={`page-item ${
+              currentPage === totalPages ? "disabled" : ""
+            }`}
+          >
+            <button
+              className="page-link"
+              onClick={() => this.loadEspecialidades(totalPages)}
+            >
+              Última
+            </button>
+          </li>
+        </ul>
+        <div className="text-center">
+          <small className="text-muted">
+            Página {currentPage} de {totalPages} | Total de{" "}
+            {this.state.pagination.totalItems} especialidades
+          </small>
+        </div>
+      </nav>
+    );
+  }
+
+  // NOVA LÓGICA: Renderizar a seção de benchmark para especialidades
+  renderBenchmarkSection() {
+    const { benchmarkTimes, loading } = this.state;
+    return (
+      <div className="card mt-5">
+        <div className="card-body">
+          <h5 className="card-title">
+            Benchmark de Carregamento de Especialidades
+          </h5>
+          <p className="card-text">
+            Compare o tempo de carregamento com e sem paginação.
+          </p>
+          <div className="mb-3">
+            <button
+              className="btn btn-info mr-2"
+              onClick={() => this.loadEspecialidades(1)}
+              disabled={loading}
+            >
+              Carregar Paginações ({benchmarkTimes.paginatedLoad || "N/A"})
+            </button>
+            <button
+              className="btn btn-warning"
+              onClick={this.loadAllEspecialidadesForBenchmark}
+              disabled={loading}
+            >
+              Carregar Tudo ({benchmarkTimes.fullLoad || "N/A"})
+            </button>
+          </div>
+          {loading && (
+            <div className="text-center mt-3">
+              <div
+                className="spinner-border spinner-border-sm text-secondary"
+                role="status"
+              >
+                <span className="sr-only">Carregando...</span>
+              </div>
+              <small className="ml-2">Executando benchmark...</small>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   render() {
     return (
       <Main {...headerProps}>
         {this.renderForm()}
+        {this.renderPageSizeSelector()}
         {this.renderTable()}
+        {this.renderPagination()}
+        {this.renderBenchmarkSection()}
       </Main>
     );
   }

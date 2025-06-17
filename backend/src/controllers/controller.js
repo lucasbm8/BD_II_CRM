@@ -465,17 +465,47 @@ exports.atualizarAgenda = async (req, res) => {
 };
 
 // ==============================
-// MÓDULO DE ESPECIALIDADES (MANTIDO INTACTO)
+// MÓDULO DE ESPECIALIDADES
 // ==============================
 
+/**
+ * GET - Lista todas as especialidades com suporte a paginação, ordenadas do código maior para o menor.
+ * @param {object} req.query - Parâmetros de query para paginação (page, limit)
+ */
 exports.showEspecialidades = async (req, res) => {
   try {
-    const response = await db.query(
-      "SELECT * FROM especialidade ORDER BY nomee;"
-    );
-    res.status(200).send(response.rows);
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10; // Padrão 10 itens por página
+    const offset = (page - 1) * limit;
+
+    // Query para buscar as especialidades com paginação, ordenadas por código DESC
+    const specialtiesQuery = `
+      SELECT * FROM especialidade 
+      ORDER BY codigo DESC -- ALTERADO: Ordena por codigo (código da especialidade) DESCENDENTE
+      LIMIT $1 OFFSET $2;
+    `;
+    // Query para contar o total de especialidades (sem paginação)
+    const countQuery = `
+      SELECT COUNT(*) FROM especialidade;
+    `;
+
+    const [specialtiesResult, totalResult] = await Promise.all([
+      db.query(specialtiesQuery, [limit, offset]),
+      db.query(countQuery),
+    ]);
+
+    const totalItems = parseInt(totalResult.rows[0].count, 10);
+    const totalPages = Math.ceil(totalItems / limit);
+
+    res.status(200).json({
+      data: specialtiesResult.rows,
+      total: totalItems,
+      page: page,
+      totalPages: totalPages,
+      itemsPerPage: limit,
+    });
   } catch (error) {
-    console.error("Erro ao buscar especialidades:", error);
+    console.error("Erro ao buscar especialidades com paginação:", error);
     res.status(500).send("Erro ao buscar especialidades");
   }
 };
