@@ -3,12 +3,12 @@ import axios from "axios";
 import Main from "../template/Main";
 
 const headerProps = {
-  icon: "users", // Ícone mais genérico para pacientes
+  icon: "users",
   title: "Cadastros",
   subtitle: "Tela de cadastro de Pacientes",
 };
 
-const baseUrl = "http://localhost:4040/pacientes"; // Base URL para pacientes (mudado para plural para consistência RESTful)
+const baseUrl = "http://localhost:4040/pacientes"; // Base URL para pacientes
 
 const initialState = {
   user: {
@@ -21,29 +21,27 @@ const initialState = {
     telefone: "",
   },
   list: [],
-  // NOVA LÓGICA: Paginação
   pagination: {
     currentPage: 1,
-    itemsPerPage: 10, // Default 10 itens por página
+    itemsPerPage: 10,
     totalItems: 0,
     totalPages: 1,
   },
-  loading: false, // NOVA LÓGICA: Estado de carregamento
+  loading: false,
   benchmarkTimes: {
-    // NOVA LÓGICA: Para exibir tempos de benchmark
     paginatedLoad: null,
     fullLoad: null,
   },
+  isEditing: false, // <-- NOVA LÓGICA: Estado para controlar o modo de edição
 };
 
 export default class RegisterPaciente extends Component {
   state = { ...initialState };
 
   componentDidMount() {
-    this.loadPacientes(); // NOVA LÓGICA: Renomeado para loadPacientes
+    this.loadPacientes();
   }
 
-  // NOVA LÓGICA: Função para carregar pacientes com paginação
   loadPacientes = async (page = this.state.pagination.currentPage) => {
     this.setState({
       loading: true,
@@ -52,31 +50,31 @@ export default class RegisterPaciente extends Component {
         paginatedLoad: null,
         fullLoad: null,
       },
-    }); // Resetar tempos
+    });
 
     try {
       const { itemsPerPage } = this.state.pagination;
-      const startTime = performance.now(); // Início da medição
+      const startTime = performance.now();
       const response = await axios.get(baseUrl, {
         params: {
           page,
           limit: itemsPerPage,
         },
       });
-      const endTime = performance.now(); // Fim da medição
+      const endTime = performance.now();
 
       this.setState({
         list: response.data.data,
         pagination: {
           currentPage: response.data.page,
-          itemsPerPage: response.data.itemsPerPage, // Assegura que o itemsPerPage da API seja usado
+          itemsPerPage: response.data.itemsPerPage,
           totalItems: response.data.total,
           totalPages: response.data.totalPages,
         },
         loading: false,
         benchmarkTimes: {
           ...this.state.benchmarkTimes,
-          paginatedLoad: `${(endTime - startTime).toFixed(2)} ms`, // Tempo de carregamento paginado
+          paginatedLoad: `${(endTime - startTime).toFixed(2)} ms`,
         },
       });
     } catch (error) {
@@ -86,7 +84,6 @@ export default class RegisterPaciente extends Component {
     }
   };
 
-  // NOVA LÓGICA: Função para carregar todos os pacientes (para benchmark de comparação)
   loadAllPacientesForBenchmark = async () => {
     this.setState({
       loading: true,
@@ -95,14 +92,12 @@ export default class RegisterPaciente extends Component {
         paginatedLoad: null,
         fullLoad: null,
       },
-    }); // Resetar tempos
+    });
     try {
-      const startTime = performance.now(); // Início da medição
-      const response = await axios.get(baseUrl, { params: { limit: 999999 } }); // Um limite bem alto para "todos"
-      const endTime = performance.now(); // Fim da medição
+      const startTime = performance.now();
+      const response = await axios.get(baseUrl, { params: { limit: 999999 } });
+      const endTime = performance.now();
 
-      // Nota: Não estamos atualizando a lista principal aqui, apenas medindo
-      // Isso é para simular o "custo" de carregar tudo de uma vez
       console.log(
         `Carregamento COMPLETO para benchmark: ${
           response.data.data.length
@@ -113,7 +108,7 @@ export default class RegisterPaciente extends Component {
         loading: false,
         benchmarkTimes: {
           ...this.state.benchmarkTimes,
-          fullLoad: `${(endTime - startTime).toFixed(2)} ms`, // Tempo de carregamento completo
+          fullLoad: `${(endTime - startTime).toFixed(2)} ms`,
         },
       });
       alert(
@@ -130,35 +125,35 @@ export default class RegisterPaciente extends Component {
   };
 
   clear() {
-    this.setState({ user: initialState.user });
+    this.setState({ user: initialState.user, isEditing: false }); // <-- Reseta isEditing para false
   }
 
   save() {
     const user = this.state.user;
-    const method = user.codigop ? "put" : "post";
-    // MUDANÇA NA URL para POST/PUT: baseUrl já é /pacientes, então apenas adiciona o ID para PUT
-    const url = user.codigop ? `${baseUrl}/${user.codigop}` : baseUrl;
+    // MUDANÇA CRÍTICA: Usa o estado `isEditing` para determinar o método
+    const method = this.state.isEditing ? "put" : "post";
+    const url = this.state.isEditing ? `${baseUrl}/${user.codigop}` : baseUrl;
 
     axios[method](url, user)
       .then((resp) => {
-        // A API de backend agora retorna o objeto completo do paciente salvo/atualizado
-        // Recarregar a página atual da lista para refletir as mudanças
-        this.clear(); // Limpa o formulário
-        this.loadPacientes(this.state.pagination.currentPage); // Recarrega a página atual
+        this.clear(); // Limpa o formulário e reseta isEditing
+        this.loadPacientes(this.state.pagination.currentPage);
+        alert(
+          `Paciente ${
+            method === "post" ? "cadastrado" : "atualizado"
+          } com sucesso!`
+        ); // Mensagem mais específica
       })
       .catch((error) => {
-        // Captura o erro para exibir mensagens mais específicas
         console.error("Erro ao salvar paciente:", error);
         const errorMessage =
           error.response && error.response.data
-            ? error.response.data // Supondo que o backend retorna { message: "..." }
+            ? error.response.data.message || JSON.stringify(error.response.data) // Tenta pegar a mensagem ou stringify
             : "Erro desconhecido ao salvar paciente.";
-        alert(errorMessage);
+        alert(`Erro: ${errorMessage}`); // Mensagem de erro mais clara
       });
   }
 
-  // NOVA LÓGICA: getUpdatedList não é mais estritamente necessário para save,
-  // pois loadPacientes recarrega a lista. Mantido para delete.
   getUpdatedList(user, add = true) {
     const list = this.state.list.filter((u) => u.codigop !== user.codigop);
     if (add) list.unshift(user);
@@ -171,8 +166,9 @@ export default class RegisterPaciente extends Component {
     this.setState({ user });
   }
 
+  // MUDANÇA CRÍTICA: Define isEditing para true quando um paciente é carregado para edição
   load(user) {
-    this.setState({ user }); // Coloca os dados do paciente no formulário para edição
+    this.setState({ user, isEditing: true }); // <-- Ativa o modo de edição
   }
 
   remove(user) {
@@ -186,22 +182,20 @@ export default class RegisterPaciente extends Component {
     axios
       .delete(`${baseUrl}/${user.codigop}`)
       .then(() => {
-        this.loadPacientes(this.state.pagination.currentPage); // Recarrega a página atual após deletar
+        this.loadPacientes(this.state.pagination.currentPage);
         alert("Paciente excluído com sucesso!");
       })
       .catch((error) => {
-        // Captura o erro para exibir mensagens mais específicas
         console.error("Erro ao deletar paciente:", error);
         const errorMessage =
           error.response && error.response.data
-            ? error.response.data.message // Supondo que o backend retorna { message: "..." }
+            ? error.response.data.message
             : "Erro desconhecido ao deletar paciente.";
-        alert(errorMessage);
+        alert(`Erro: ${errorMessage}`);
       });
   }
 
   renderForm() {
-    // ... (Mantido como está, sem alterações diretas na renderização do formulário) ...
     return (
       <div className="form">
         <div className="row">
@@ -209,12 +203,14 @@ export default class RegisterPaciente extends Component {
             <div className="form-group">
               <label>Código</label>
               <input
-                type="number"
+                type="number" // Mantém como number
                 className="form-control"
                 name="codigop"
                 value={this.state.user.codigop}
                 onChange={(e) => this.updateField(e)}
                 placeholder="Digite o código..."
+                // DESABILITA o campo código se estiver editando um paciente existente
+                disabled={this.state.isEditing} // <-- NOVA LÓGICA: Desabilita edição de código
               />
             </div>
           </div>
@@ -310,7 +306,8 @@ export default class RegisterPaciente extends Component {
         <div className="row">
           <div className="col-12 d-flex justify-content-end">
             <button className="btn btn-primary" onClick={() => this.save()}>
-              {this.state.user.codigop ? "Atualizar" : "Cadastrar"}
+              {/* MUDANÇA: O texto do botão agora depende de `isEditing` */}
+              {this.state.isEditing ? "Atualizar" : "Cadastrar"}
             </button>
             <button
               className="btn btn-secondary ml-2"
@@ -325,10 +322,10 @@ export default class RegisterPaciente extends Component {
   }
 
   renderTable() {
-    const { list, loading } = this.state; // NOVA LÓGICA: Adiciona loading
+    // ... (Mantido como está) ...
+    const { list, loading } = this.state;
 
     if (loading) {
-      // NOVA LÓGICA: Exibir spinner de carregamento
       return (
         <div className="text-center py-5">
           <div className="spinner-border text-primary" role="status">
@@ -340,7 +337,6 @@ export default class RegisterPaciente extends Component {
     }
 
     if (list.length === 0) {
-      // NOVA LÓGICA: Mensagem se não houver dados
       return (
         <div className="alert alert-info mt-4">Nenhum paciente cadastrado.</div>
       );
@@ -350,7 +346,7 @@ export default class RegisterPaciente extends Component {
       <table className="table mt-4">
         <thead>
           <tr>
-            <th>Código</th> {/* Mudado de ID para Código */}
+            <th>Código</th>
             <th>Nome</th>
             <th>CPF</th>
             <th>Endereço</th>
@@ -366,6 +362,7 @@ export default class RegisterPaciente extends Component {
   }
 
   renderRows() {
+    // ... (Mantido como está) ...
     return this.state.list.map((user) => (
       <tr key={user.codigop}>
         <td>{user.codigop}</td>
@@ -390,9 +387,9 @@ export default class RegisterPaciente extends Component {
     ));
   }
 
-  // NOVA LÓGICA: Função para renderizar o seletor de itens por página
   renderPageSizeSelector() {
-    const pageSizes = [5, 10, 20, 50]; // Opções de itens por página
+    // ... (Mantido como está) ...
+    const pageSizes = [5, 10, 20, 50];
     const { itemsPerPage } = this.state.pagination;
 
     return (
@@ -407,10 +404,10 @@ export default class RegisterPaciente extends Component {
                 pagination: {
                   ...prevState.pagination,
                   itemsPerPage: parseInt(e.target.value, 10),
-                  currentPage: 1, // Volta para a primeira página ao mudar o tamanho
+                  currentPage: 1,
                 },
               }),
-              () => this.loadPacientes(1) // Recarrega os pacientes com a nova configuração
+              () => this.loadPacientes(1)
             );
           }}
         >
@@ -424,20 +421,19 @@ export default class RegisterPaciente extends Component {
     );
   }
 
-  // NOVA LÓGICA: Função para renderizar a navegação da paginação
   renderPagination() {
+    // ... (Mantido como está) ...
     const { pagination } = this.state;
     const { currentPage, totalPages } = pagination;
 
-    if (totalPages <= 1) return null; // Não mostra a paginação se houver apenas 1 página
+    if (totalPages <= 1) return null;
 
     const pageNumbers = [];
-    const maxVisiblePages = 5; // Número máximo de botões de página visíveis
+    const maxVisiblePages = 5;
 
     let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
     let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
 
-    // Ajusta o startPage se o endPage não atingir o máximo visível
     if (endPage - startPage + 1 < maxVisiblePages) {
       startPage = Math.max(1, endPage - maxVisiblePages + 1);
     }
@@ -512,7 +508,6 @@ export default class RegisterPaciente extends Component {
     );
   }
 
-  // NOVA LÓGICA: Renderizar a seção de benchmark para pacientes
   renderBenchmarkSection() {
     const { benchmarkTimes, loading } = this.state;
     return (
@@ -558,11 +553,10 @@ export default class RegisterPaciente extends Component {
     return (
       <Main {...headerProps}>
         {this.renderForm()}
-        {this.renderPageSizeSelector()}{" "}
-        {/* Adicionado seletor de tamanho de página */}
+        {this.renderPageSizeSelector()}
         {this.renderTable()}
-        {this.renderPagination()} {/* Adicionado controle de paginação */}
-        {this.renderBenchmarkSection()} {/* Adicionado seção de benchmark */}
+        {this.renderPagination()}
+        {this.renderBenchmarkSection()}
       </Main>
     );
   }
