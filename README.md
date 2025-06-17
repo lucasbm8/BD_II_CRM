@@ -132,13 +132,13 @@ Para uma configuração mais simples, configure a senha do usuário padrão do P
 
 ---
 
-## 📸 Modelo Relacional Lógico
+## 📸 Modelo Relacional
 
-(Aqui você pode adicionar as imagens do modelo relacional lógico do seu banco de dados.)
+![Texto Alternativo](https://github.com/lucasbm8/BD_II_CRM/blob/feature/melhorias/MODELO%20ER.jpg)
 
-Exemplo:
+## 📸 Modelo Lógico
 
-_Descreva brevemente o que a imagem representa, por exemplo: "Este diagrama ilustra a estrutura das tabelas e seus relacionamentos no banco de dados Clinic+."_
+![Texto Alternativo](https://github.com/lucasbm8/BD_II_CRM/blob/feature/melhorias/modelo%20logico.jpg)
 
 ---
 
@@ -153,11 +153,3 @@ Sinta-se à vontade para contribuir para este projeto. Para fazer isso:
 5.  Abra um Pull Request.
 
 ---
-
-## 📄 Licença
-
-Este projeto está licenciado sob a Licença MIT. Veja o arquivo `LICENSE` para mais detalhes.
-
----
-
-Espero que este `README.md` seja mais claro e útil para você e para qualquer pessoa que utilize seu projeto\! Você tem alguma outra seção que gostaria de adicionar ou alguma parte que precise de mais detalhes?
