@@ -146,10 +146,12 @@ Para uma configuração mais simples, configure a senha do usuário padrão do P
 
 Sinta-se à vontade para contribuir para este projeto. Para fazer isso:
 
-1.  Faça um fork do repositório.
-2.  Crie uma nova branch (`git checkout -b feature/sua-feature`).
-3.  Faça suas alterações e commit-as (`git commit -m 'Adiciona nova feature'`).
-4.  Envie para a branch original (`git push origin feature/sua-feature`).
-5.  Abra um Pull Request.
+1.  Utilizamos o gitflow
+2.  De o comando(`git git flow init`).
+3.  Configure para a branch principal ser master e a de desenvolvimendo dev.
+4.  para inciar uma nova feature, utilize `git flow feature start [nome da feature]`
+5.  Isso ira criar uma nova branch automaticamente, a partir da dev.
+6.  para finalizar a feature `git flow feature finish [nome da feature]`
+    Isso irá colocar a feature na branch dev que é a utilizada para homologaçao de tudo antes de ir para a master.
 
 ---
