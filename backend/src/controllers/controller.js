@@ -464,17 +464,18 @@ exports.atualizarAgenda = async (req, res) => {
   }
 };
 
-// ESPECIALIDADES
+// ==============================
+// MÓDULO DE ESPECIALIDADES (MANTIDO INTACTO)
+// ==============================
+
 exports.showEspecialidades = async (req, res) => {
   try {
-    console.log("Acessando showEspecialidades");
     const response = await db.query(
-      "SELECT * FROM especialidade ORDER BY nomee"
+      "SELECT * FROM especialidade ORDER BY nomee;"
     );
-    console.log("Dados encontrados:", response.rows.length);
     res.status(200).send(response.rows);
   } catch (error) {
-    console.error("Erro detalhado:", error);
+    console.error("Erro ao buscar especialidades:", error);
     res.status(500).send("Erro ao buscar especialidades");
   }
 };
@@ -482,19 +483,21 @@ exports.showEspecialidades = async (req, res) => {
 exports.addEspecialidade = async (req, res) => {
   try {
     const { codigo, nomee, indice } = req.body;
-
     if (!codigo || !nomee || !indice) {
-      return res.status(400).send("Todos os campos são obrigatórios");
+      return res.status(400).send("Todos os campos são obrigatórios.");
     }
-
     const response = await db.query(
-      "INSERT INTO especialidade (codigo, nomee, indice) VALUES ($1, $2, $3) RETURNING *",
+      "INSERT INTO especialidade (codigo, nomee, indice) VALUES ($1, $2, $3) RETURNING *;",
       [codigo, nomee, indice]
     );
-
     res.status(201).send(response.rows[0]);
   } catch (error) {
     console.error("Erro ao adicionar especialidade:", error);
+    if (error.code === "23505") {
+      return res
+        .status(409)
+        .send("Código ou nome de especialidade já cadastrado.");
+    }
     res.status(500).send("Erro ao adicionar especialidade");
   }
 };
@@ -503,31 +506,65 @@ exports.updateEspecialidade = async (req, res) => {
   try {
     const { codigo } = req.params;
     const { nomee, indice } = req.body;
-
     const response = await db.query(
-      "UPDATE especialidade SET nomee = $1, indice = $2 WHERE codigo = $3 RETURNING *",
+      "UPDATE especialidade SET nomee = $1, indice = $2 WHERE codigo = $3 RETURNING *;",
       [nomee, indice, codigo]
     );
-
     if (response.rowCount === 0) {
-      return res.status(404).send("Especialidade não encontrada");
+      return res.status(404).send("Especialidade não encontrada.");
     }
-
     res.status(200).send(response.rows[0]);
   } catch (error) {
     console.error("Erro ao atualizar especialidade:", error);
+    if (error.code === "23505") {
+      return res.status(409).send("Nome da especialidade já cadastrado.");
+    }
     res.status(500).send("Erro ao atualizar especialidade");
   }
 };
 
 exports.deleteEspecialidade = async (req, res) => {
+  const { codigo } = req.params;
+  const client = await db.connect();
   try {
-    const { codigo } = req.params;
-    await db.query("DELETE FROM especialidade WHERE codigo = $1", [codigo]);
-    res.status(200).send(); // Resposta vazia, status 200 OK
+    await client.query("BEGIN");
+    await client.query(
+      `
+      DELETE FROM ExerceEsp
+      WHERE idEspecial = $1;
+      `,
+      [codigo]
+    );
+    await client.query(
+      `
+      DELETE FROM Consulta
+      WHERE idespecial = $1;
+      `,
+      [codigo]
+    );
+    const result = await client.query(
+      `
+      DELETE FROM especialidade 
+      WHERE codigo = $1
+      RETURNING *;
+      `,
+      [codigo]
+    );
+    if (result.rowCount === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).send({ message: "Especialidade não encontrada." });
+    }
+    await client.query("COMMIT");
+    res.status(200).send({ message: "Especialidade deletada com sucesso!" });
   } catch (error) {
-    console.error("Erro ao deletar:", error);
-    res.status(500).send(); // Resposta vazia, status 500
+    await client.query("ROLLBACK");
+    console.error("Erro ao deletar especialidade:", error);
+    res.status(500).send({
+      message: "Erro interno ao deletar especialidade.",
+      details: error.message,
+    });
+  } finally {
+    client.release();
   }
 };
 

@@ -21,11 +21,22 @@ router.post("/agendarConsulta", controller.agendar);
 router.post("/atualizarDados", controller.atualizarAgenda);
 router.delete("/deletarConsulta/:codigo", controller.deleteConsulta);
 
-// ROTAS DE ESPECIALIDADES (VERIFIQUE OS NOMES EXATOS NO CONTROLLER)
-router.get("/listarEspecialidades", controller.showEspecialidades);
-router.post("/cadastrarEspecialidade", controller.addEspecialidade);
-router.put("/atualizarEspecialidade/:codigo", controller.updateEspecialidade);
-router.delete("/removerEspecialidade/:codigo", controller.deleteEspecialidade);
+// ==============================
+// ROTAS PARA ESPECIALIDADES
+// Prefixo recomendado: /especialidades
+// ==============================
+
+// GET: Lista todas as especialidades
+router.get("/especialidades", controller.showEspecialidades);
+
+// POST: Adiciona uma nova especialidade
+router.post("/especialidades", controller.addEspecialidade);
+
+// PUT: Atualiza uma especialidade existente (Código no parâmetro da URL)
+router.put("/especialidades/:codigo", controller.updateEspecialidade);
+
+// DELETE: Deleta uma especialidade e suas referências em tabelas filhas (Código no parâmetro da URL)
+router.delete("/especialidades/:codigo", controller.deleteEspecialidade);
 
 // ==============================
 // ROTAS PARA PACIENTES (Verifique a URL, alterada para plural)
