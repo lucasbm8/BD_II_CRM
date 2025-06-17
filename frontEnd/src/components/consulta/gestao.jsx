@@ -8,15 +8,8 @@ const headerProps = {
   subtitle: "Listagem paginada de consultas",
 };
 
-const baseUrl = "http://localhost:4040/";
-const controlers = {
-  medicos: "medicos",
-  agendaMedico: "agendaMedico",
-  agenda: "AgendaCodigo",
-  agendar: "agendarConsulta",
-  atualizar: "atualizarDados",
-  listarConsultas: "listarConsultas",
-};
+// Base URL para as consultas
+const baseUrl = "http://localhost:4040/"; // Deixamos assim para compatibilidade com outras rotas como benchmark/explain-query
 
 const initialState = {
   med: { nomem: "", crm: "" },
@@ -31,12 +24,12 @@ const initialState = {
     valorpago: "",
     pagou: false,
     formapagamento: "",
+    diasemana: null, // Certifique-se que existe para atualização
   },
-  list: [],
-  consultas: [],
-  agendaOpen: false,
-  agenda: <div></div>,
-  horarios: [],
+  list: [], // Lista de médicos (para o select)
+  consultas: [], // Consultas listadas na tabela
+  agendaOpen: false, // Controla a exibição do formulário de edição
+  horarios: [], // Horários disponíveis para seleção
   pagination: {
     currentPage: 1,
     itemsPerPage: 20,
@@ -49,38 +42,56 @@ const initialState = {
     dataInicio: "",
     dataFim: "",
   },
-  loading: false,
-  editMode: false, // Novo estado para controlar modo de edição
-  benchmarkWhere: "",
-  benchmarkPlan: null,
+  loading: false, // Estado geral de carregamento
+  editMode: false, // Controla se está editando uma consulta existente
+
+  // ==============================
+  // ESTADOS PARA BENCHMARK
+  // ==============================
+  benchmarkQueryInput:
+    "SELECT * FROM Consulta WHERE idMedico = [CRM_DO_MEDICO_AQUI];", // Campo para a query
+  benchmarkPlan: null, // Resultado do EXPLAIN
+  benchmarkLoading: false, // Loading específico para benchmark
+  benchmarkResults: {
+    // Para armazenar tempos antes e depois
+    indexMedico: { before: null, after: null },
+    indexData: { before: null, after: null },
+    // Adicionar outros benchmarks aqui
+  },
 };
 
-export default class RegisterMedico extends Component {
+export default class Gestao extends Component {
+  // Renomeado de RegisterMedico para Gestao
   state = { ...initialState };
 
   componentDidMount() {
     this.loadConsultas();
-    this.loadMedicos();
+    this.loadMedicos(); // Carrega lista de médicos para o select do formAgenda
   }
 
-  loadMedicos = () => {
-    axios(baseUrl + controlers.medicos).then((resp) => {
-      this.setState({ list: resp.data });
-    });
+  // NOVA FUNÇÃO: Load médicos para o select de edição
+  loadMedicos = async () => {
+    try {
+      const response = await axios.get(`${baseUrl}medicos`); // Usa a rota /medicos
+      this.setState({ list: response.data }); // list agora contém os médicos
+    } catch (error) {
+      console.error("Erro ao carregar médicos:", error);
+    }
   };
 
-  loadConsultas = async (page = 1) => {
+  loadConsultas = async (page = this.state.pagination.currentPage) => {
     this.setState({ loading: true });
 
     try {
-      const { itemsPerPage } = this.state.pagination;
-      const { filters } = this.state;
+      const { itemsPerPage, filters } = this.state.pagination; // 'filters' está no estado principal, não em pagination
+      const actualFilters = this.state.filters; // Use o objeto filters do estado
 
-      const response = await axios.get(`${baseUrl}listarConsultas`, {
+      const response = await axios.get(`${baseUrl}consultas`, {
+        // MUDANÇA: Usar '/consultas'
         params: {
           page,
-          limit: itemsPerPage,
-          ...filters,
+          limit: this.state.pagination.itemsPerPage, // Usa itemsPerPage do estado
+          ...actualFilters, // Passa os filtros
         },
       });
 
@@ -88,7 +99,7 @@ export default class RegisterMedico extends Component {
         consultas: response.data.data,
         pagination: {
           currentPage: response.data.page,
-          itemsPerPage,
+          itemsPerPage: response.data.itemsPerPage, // Pega o valor real da API
           totalItems: response.data.total,
           totalPages: response.data.totalPages,
         },
@@ -111,7 +122,6 @@ export default class RegisterMedico extends Component {
     }));
   };
 
-  // Nova função para deletar consulta
   handleDeleteConsulta = async (codigoConsulta) => {
     if (
       !window.confirm(
@@ -122,21 +132,22 @@ export default class RegisterMedico extends Component {
     }
 
     try {
-      await axios.delete(`${baseUrl}deletarConsulta/${codigoConsulta}`);
+      await axios.delete(`${baseUrl}consultas/${codigoConsulta}`); // MUDANÇA: Usar '/consultas/:codigo'
       alert("Consulta excluída com sucesso!");
-      this.loadConsultas(this.state.pagination.currentPage); // Recarregar a página atual
+      this.loadConsultas(this.state.pagination.currentPage);
     } catch (error) {
       console.error("Erro ao deletar consulta:", error);
       const errorMessage =
-        error.response && error.response.data && error.response.data.message
-          ? error.response.data.message
-          : "Erro ao deletar consulta. Verifique o console para detalhes.";
+        (error.response &&
+          error.response.data &&
+          error.response.data.message) ||
+        "Erro ao deletar consulta. Verifique o console para detalhes.";
       alert(errorMessage);
     }
   };
 
   applyFilters = () => {
-    this.loadConsultas(1); // Recarregar da primeira página com filtros
+    this.loadConsultas(1);
   };
 
   resetFilters = () => {
@@ -153,17 +164,13 @@ export default class RegisterMedico extends Component {
     );
   };
 
-  // FUNÇÃO DE EDIÇÃO: Pega os dados diretamente da tabela
   handleEdit = (consulta) => {
-    // Calcular dia da semana (0 = domingo, 1 = segunda, etc.)
     const dataConsulta = new Date(consulta.data);
     const diasemana = dataConsulta.getDay();
-    console.log("Editando consulta:", consulta);
 
-    // Converter os dados da consulta para o formato do dadosAgenda
     const dadosConsulta = {
       codigo: consulta.codigo,
-      data: consulta.data,
+      data: this.formatDateForInput(consulta.data), // Formatar para input de data
       horainic: consulta.horainic,
       horafim: consulta.horafim,
       idpaciente: consulta.idpaciente,
@@ -172,23 +179,20 @@ export default class RegisterMedico extends Component {
       valorpago: consulta.valorpago,
       pagou: consulta.pagou,
       formapagamento: consulta.formapagamento,
-      diasemana: diasemana, // ← Adicionar o dia da semana
+      diasemana: diasemana,
     };
 
     this.setState({
       dadosAgenda: dadosConsulta,
-      editMode: true,
-      agendaOpen: true,
-      agenda: <div></div>, // ← Remover a renderização fixa
+      editMode: true, // Ativa o modo de edição
+      agendaOpen: true, // Abre o formulário de edição
     });
   };
 
-  // FUNÇÃO CORRIGIDA: cancelEdit
   cancelEdit = () => {
     this.clear();
   };
 
-  // FUNÇÃO CORRIGIDA: clear
   clear = () => {
     this.setState({
       dadosAgenda: initialState.dadosAgenda,
@@ -197,63 +201,64 @@ export default class RegisterMedico extends Component {
     });
   };
 
-  // FUNÇÃO CORRIGIDA: save
-  save = () => {
+  save = async () => {
+    // Usar async/await
     const dadosAgenda = this.state.dadosAgenda;
 
     // Validações básicas
     if (!dadosAgenda.codigo) {
-      alert("Código da consulta é obrigatório");
+      alert("Código da consulta é obrigatório.");
       return;
     }
-
     if (!dadosAgenda.idpaciente || !dadosAgenda.idmedico) {
-      alert("Paciente e médico são obrigatórios");
+      alert("Paciente e médico são obrigatórios.");
       return;
     }
-
     if (!dadosAgenda.data || !dadosAgenda.horainic || !dadosAgenda.horafim) {
-      alert("Data e horários são obrigatórios");
+      alert("Data e horários são obrigatórios.");
       return;
     }
 
-    const method = "post";
-    const url = baseUrl + controlers.atualizar;
+    // MUDANÇA: Usar PUT para atualização, a rota é /consultas/:codigo
+    const url = `${baseUrl}consultas/${dadosAgenda.codigo}`;
+    const method = "put"; // Sempre PUT para salvar edições aqui
 
-    console.log("Salvando dados:", dadosAgenda);
-
-    axios({
-      method: method,
-      url: url,
-      data: { dadosAgenda: dadosAgenda },
-    })
-      .then((resp) => {
-        console.log("Resultado da atualização:", resp);
-        alert("Consulta alterada com sucesso!");
-        this.clear();
-        this.loadConsultas(this.state.pagination.currentPage); // Recarregar a página atual
-      })
-      .catch((error) => {
-        console.error("Erro na requisição:", error);
-        alert("Erro ao atualizar consulta. Verifique o console para detalhes.");
+    try {
+      const resp = await axios({
+        method: method,
+        url: url,
+        data: dadosAgenda, // Envia dadosAgenda diretamente, sem 'dadosAgenda:' aninhado
       });
+      console.log("Resultado da atualização:", resp.data);
+      alert("Consulta alterada com sucesso!");
+      this.clear();
+      this.loadConsultas(this.state.pagination.currentPage);
+    } catch (error) {
+      console.error(
+        "Erro na requisição:",
+        (error.response && error.response.data) || error.message
+      );
+      const errorMessage =
+        (error.response &&
+          error.response.data &&
+          error.response.data.message) ||
+        "Erro ao atualizar consulta. Verifique o console para detalhes.";
+      alert(`Erro: ${errorMessage}`);
+    }
   };
 
   updateFieldAgenda = (event) => {
     const dadosAgenda = { ...this.state.dadosAgenda };
     const { name, value } = event.target;
 
-    // Tratar conversões de tipo adequadamente
     if (name === "pagou") {
-      dadosAgenda[name] =
-        value === "true" ? true : value === "false" ? false : value;
+      dadosAgenda[name] = value === "true"; // Converte para boolean
     } else if (name === "valorpago") {
       dadosAgenda[name] = value === "" ? "" : parseFloat(value) || 0;
     } else {
       dadosAgenda[name] = value;
     }
 
-    // Se a data mudou, recalcular o dia da semana
     if (name === "data" && value) {
       const dataConsulta = new Date(value);
       dadosAgenda.diasemana = dataConsulta.getDay();
@@ -273,13 +278,11 @@ export default class RegisterMedico extends Component {
       timeSlots.push(`${hours}:${minutes}:00`);
       start.setMinutes(start.getMinutes() + interval);
     }
-
     return timeSlots;
   }
 
   formatDate(isoDate) {
     if (!isoDate) return "";
-
     const date = new Date(isoDate);
     const day = String(date.getDate()).padStart(2, "0");
     const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -289,7 +292,6 @@ export default class RegisterMedico extends Component {
 
   formatDateForInput(isoDate) {
     if (!isoDate) return "";
-
     const date = new Date(isoDate);
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -299,12 +301,25 @@ export default class RegisterMedico extends Component {
 
   renderFilters() {
     const { filters } = this.state;
-
     return (
       <div className="card mb-4">
         <div className="card-body">
           <h5 className="card-title">Filtros</h5>
           <div className="row">
+            <div className="col-md-3">
+              <div className="form-group">
+                <label>Código da Consulta</label>{" "}
+                {/* Adicionado filtro por código */}
+                <input
+                  type="number"
+                  className="form-control"
+                  name="codigo"
+                  value={filters.codigo}
+                  onChange={this.handleFilterChange}
+                  placeholder="Código da consulta"
+                />
+              </div>
+            </div>
             <div className="col-md-3">
               <div className="form-group">
                 <label>Nome do Paciente</label>
@@ -318,8 +333,34 @@ export default class RegisterMedico extends Component {
                 />
               </div>
             </div>
+            <div className="col-md-3">
+              <div className="form-group">
+                <label>Data Início</label>
+                <input
+                  type="date"
+                  className="form-control"
+                  name="dataInicio"
+                  value={filters.dataInicio}
+                  onChange={this.handleFilterChange}
+                />
+              </div>
+            </div>
+            <div className="col-md-3">
+              <div className="form-group">
+                <label>Data Fim</label>
+                <input
+                  type="date"
+                  className="form-control"
+                  name="dataFim"
+                  value={filters.dataFim}
+                  onChange={this.handleFilterChange}
+                />
+              </div>
+            </div>
 
-            <div className="col-md-3 d-flex align-items-end">
+            <div className="col-md-12 d-flex align-items-end justify-content-end">
+              {" "}
+              {/* Ajustado para botões à direita */}
               <button
                 className="btn btn-primary mr-2"
                 onClick={this.applyFilters}
@@ -348,13 +389,14 @@ export default class RegisterMedico extends Component {
           value={itemsPerPage}
           onChange={(e) => {
             this.setState(
-              {
+              (prevState) => ({
+                // Usar prevState para setState aninhado
                 pagination: {
-                  ...this.state.pagination,
-                  itemsPerPage: parseInt(e.target.value),
+                  ...prevState.pagination,
+                  itemsPerPage: parseInt(e.target.value, 10), // Garante que é um número
                   currentPage: 1,
                 },
-              },
+              }),
               () => this.loadConsultas(1)
             );
           }}
@@ -369,37 +411,7 @@ export default class RegisterMedico extends Component {
     );
   }
 
-  formMedicoAgenda() {
-    if (this.state.editMode) return null; // Não mostrar busca quando em modo de edição
-
-    return (
-      <div className="form">
-        <div className="row">
-          <div className="col-12 col-md-6">
-            <div className="form-group">
-              <label>Código da consulta</label>
-              <input
-                type="text"
-                className="form-control"
-                name="codigo"
-                value={this.state.dadosAgenda.codigo}
-                onChange={this.updateFieldAgenda}
-                placeholder="Digite o código da consulta"
-              />
-            </div>
-          </div>
-          <div className="col-12 col-md-6 d-flex align-items-end">
-            <button
-              className="btn btn-primary"
-              onClick={() => this.findAgenda()}
-            >
-              Buscar
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // formMedicoAgenda() { foi removido, pois a edição agora é direta da tabela }
 
   formAgenda(listHorarios, dados) {
     return (
@@ -433,11 +445,15 @@ export default class RegisterMedico extends Component {
                     onChange={this.updateFieldAgenda}
                   >
                     <option value="">Selecione</option>
-                    {this.state.list.map((med) => (
-                      <option key={med.crm} value={med.crm}>
-                        {med.nomem}
-                      </option>
-                    ))}
+                    {this.state.list.map(
+                      (
+                        med // this.state.list deve ter os médicos
+                      ) => (
+                        <option key={med.crm} value={med.crm}>
+                          {med.nomem}
+                        </option>
+                      )
+                    )}
                   </select>
                 </div>
               </div>
@@ -449,7 +465,7 @@ export default class RegisterMedico extends Component {
                   <label>Código Paciente</label>
                   <input
                     value={dados.idpaciente || ""}
-                    type="text"
+                    type="number" // Código do paciente deve ser número
                     className="form-control"
                     name="idpaciente"
                     onChange={this.updateFieldAgenda}
@@ -502,7 +518,7 @@ export default class RegisterMedico extends Component {
                 <div className="form-group">
                   <label>Código Especialidade</label>
                   <input
-                    type="text"
+                    type="number" // Código da especialidade deve ser número
                     value={dados.idespecial || ""}
                     className="form-control"
                     name="idespecial"
@@ -534,13 +550,15 @@ export default class RegisterMedico extends Component {
                   <label>Pagou</label>
                   <select
                     className="form-control"
-                    value={dados.pagou !== undefined ? dados.pagou : ""}
+                    value={
+                      dados.pagou !== undefined ? dados.pagou.toString() : ""
+                    } // Converte boolean para string
                     name="pagou"
                     onChange={this.updateFieldAgenda}
                   >
                     <option value="">Selecione</option>
-                    <option value={true}>Sim</option>
-                    <option value={false}>Não</option>
+                    <option value="true">Sim</option>
+                    <option value="false">Não</option>
                   </select>
                 </div>
               </div>
@@ -732,14 +750,14 @@ export default class RegisterMedico extends Component {
                 </td>
                 <td>
                   <button
-                    className="btn btn-sm btn-primary mr-2" // Adicionado mr-2 para espaçamento
+                    className="btn btn-sm btn-primary mr-2"
                     onClick={() => this.handleEdit(consulta)}
                     disabled={this.state.agendaOpen}
                   >
                     <i className="fa fa-edit"></i> Editar
                   </button>
                   <button
-                    className="btn btn-sm btn-danger" // Botão de deletar
+                    className="btn btn-sm btn-danger"
                     onClick={() => this.handleDeleteConsulta(consulta.codigo)}
                   >
                     <i className="fa fa-trash"></i> Deletar
@@ -753,63 +771,381 @@ export default class RegisterMedico extends Component {
     );
   }
 
-  renderBenchmark() {
+  // NOVO MÉTODO PARA RENDERIZAR BENCHMARKS ESPECÍFICOS
+  renderSpecificBenchmark(
+    title,
+    description,
+    queryTemplate,
+    indexCreationEndpoint,
+    benchmarkResultKey,
+    placeholderValue
+  ) {
+    const { benchmarkLoading, benchmarkResults } = this.state;
+    const currentResult = benchmarkResults[benchmarkResultKey];
+    // console.log para debug: console.log(`currentResult para ${benchmarkResultKey}:`, currentResult);
+
+    const { before, after } = currentResult || { before: null, after: null };
+
     return (
-      <div className="card mt-5">
+      <div className="card mt-3">
         <div className="card-body">
-          <h5 className="card-title">Benchmark de Consulta SQL</h5>
+          <h5 className="card-title">{title}</h5>
+          <p className="card-text">{description}</p>
           <div className="form-group">
-            <label>Cláusula WHERE (ex: codigo = 30000)</label>
+            <label>Valor para a consulta (ex: CRM do médico)</label>
             <input
               type="text"
               className="form-control"
-              value={this.state.benchmarkWhere || ""}
+              value={this.state[`${benchmarkResultKey}Value`] || ""}
               onChange={(e) =>
-                this.setState({ benchmarkWhere: e.target.value })
+                this.setState({
+                  [`${benchmarkResultKey}Value`]: e.target.value,
+                })
               }
+              placeholder={placeholderValue}
             />
           </div>
-          <button className="btn btn-primary mr-2" onClick={this.runBenchmark}>
-            Executar EXPLAIN
-          </button>
-          <button className="btn btn-secondary" onClick={this.createIndex}>
-            Criar Índice em idmedico
-          </button>
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <button
+                className="btn btn-info mr-2"
+                onClick={() =>
+                  this.runSpecificBenchmark(
+                    queryTemplate,
+                    benchmarkResultKey,
+                    "before"
+                  )
+                }
+                disabled={benchmarkLoading}
+              >
+                EXPLAIN (Sem Índice)
+              </button>
+              <button
+                className="btn btn-success"
+                onClick={() =>
+                  this.createSpecificIndex(
+                    indexCreationEndpoint,
+                    benchmarkResultKey
+                  )
+                }
+                disabled={benchmarkLoading}
+              >
+                Criar Índice
+              </button>
+            </div>
+            <div>
+              <button
+                className="btn btn-warning"
+                onClick={() =>
+                  this.runSpecificBenchmark(
+                    queryTemplate,
+                    benchmarkResultKey,
+                    "after"
+                  )
+                }
+                // ALTERAÇÃO AQUI: Substitua `?.` por `&&`
+                disabled={
+                  benchmarkLoading || !(currentResult && currentResult.after)
+                }
+              >
+                EXPLAIN (Com Índice)
+              </button>
+            </div>
+          </div>
 
-          {this.state.benchmarkPlan && (
-            <pre className="mt-3 bg-light p-3">
-              {JSON.stringify(this.state.benchmarkPlan, null, 2)}
-            </pre>
+          {benchmarkLoading && (
+            <div className="text-center mt-3">
+              <div
+                className="spinner-border spinner-border-sm text-secondary"
+                role="status"
+              >
+                <span className="sr-only">Carregando...</span>
+              </div>
+              <small className="ml-2">Executando benchmark...</small>
+            </div>
+          )}
+
+          {before && (
+            <div className="mt-3">
+              <h6>Resultado Sem Índice:</h6>
+              <pre className="bg-light p-2 small">
+                Execution Time: {before.executionTime} ms
+                <br />
+                Planning Time: {before.planningTime} ms
+                {/* ALTERAÇÃO AQUI: Substitua `?.` por `&&` */}
+                <br />
+                Nodes:{" "}
+                {(before && before.Plan && before.Plan["Node Type"]) || "N/A"}
+              </pre>
+            </div>
+          )}
+          {after && (
+            <div className="mt-3">
+              <h6>Resultado Com Índice:</h6>
+              <pre className="bg-light p-2 small">
+                Execution Time: {after.executionTime} ms
+                <br />
+                Planning Time: {after.planningTime} ms
+                {/* ALTERAÇÃO AQUI: Substitua `?.` por `&&` */}
+                <br />
+                Nodes:{" "}
+                {(after && after.Plan && after.Plan["Node Type"]) || "N/A"}
+              </pre>
+            </div>
           )}
         </div>
       </div>
     );
   }
 
-  runBenchmark = async () => {
-    const where = this.state.benchmarkWhere;
+  // Função genérica para executar benchmarks específicos
+  runSpecificBenchmark = async (queryTemplate, benchmarkResultKey, type) => {
+    this.setState({ benchmarkLoading: true });
+    const value = this.state[`${benchmarkResultKey}Value`];
+    if (!value) {
+      alert(
+        `Por favor, insira um valor para a consulta de ${benchmarkResultKey}.`
+      );
+      this.setState({ benchmarkLoading: false });
+      return;
+    }
+
+    const query = queryTemplate.replace("[VALUE]", value);
+
     try {
-      const response = await axios.get(`${baseUrl}benchmark/explain`, {
-        params: { where },
+      const response = await axios.get(`${baseUrl}benchmark/explain-query`, {
+        params: { query },
       });
-      this.setState({ benchmarkPlan: response.data.plan });
+      const plan = response.data.plan;
+
+      const executionTime = plan["Execution Time"] || 0;
+      const planningTime = plan["Planning Time"] || 0;
+
+      this.setState((prevState) => ({
+        benchmarkResults: {
+          ...prevState.benchmarkResults,
+          [benchmarkResultKey]: {
+            ...prevState.benchmarkResults[benchmarkResultKey],
+            [type]: {
+              ...plan, // Armazena o plano completo se quiser exibir mais detalhes
+              executionTime,
+              planningTime,
+            },
+          },
+        },
+        benchmarkLoading: false,
+      }));
+      alert(
+        `Benchmark '${type}' para ${benchmarkResultKey} executado com sucesso!`
+      );
     } catch (err) {
-      alert("Erro ao executar EXPLAIN");
+      console.error(
+        `Erro ao executar benchmark para ${benchmarkResultKey} (${type}):`,
+        // ALTERAÇÃO AQUI: Substitua `?.` por `&&`
+        (err.response && err.response.data) || err.message
+      );
+      alert(
+        `Erro ao executar benchmark para ${benchmarkResultKey}. Verifique o console para detalhes.`
+      );
+      this.setState({ benchmarkLoading: false });
+    }
+  };
+  // Função genérica para criar índices específicos
+  createSpecificIndex = async (indexCreationEndpoint, benchmarkResultKey) => {
+    this.setState({ benchmarkLoading: true });
+    try {
+      await axios.post(`${baseUrl}${indexCreationEndpoint}`);
+      alert(`Índice para ${benchmarkResultKey} criado com sucesso!`);
+      this.setState({ benchmarkLoading: false });
+    } catch (err) {
+      console.error(
+        `Erro ao criar índice para ${benchmarkResultKey}:`,
+        (err.response && err.response.data) || err.message
+      );
+      alert(
+        `Erro ao criar índice para ${benchmarkResultKey}. Verifique o console para detalhes.`
+      );
+      this.setState({ benchmarkLoading: false });
     }
   };
 
-  createIndex = async () => {
+  renderBenchmarkSection() {
+    return (
+      <div className="card mt-5">
+        <div className="card-header">
+          <h5>Demonstrações de Otimização e Performance</h5>
+          <p className="text-muted">
+            Utilize as ferramentas abaixo para observar o impacto de índices e a
+            paginação.
+          </p>
+        </div>
+        <div className="card-body">
+          {/* Benchmark de Paginação (referente à tabela principal de consultas) */}
+          <div className="card mb-4">
+            <div className="card-body">
+              <h5 className="card-title">
+                Custo da Paginação vs. Carregamento Completo
+              </h5>
+              <p className="card-text">
+                A tabela acima já utiliza paginação. Para demonstrar o ganho,
+                clique em "Carregar Tudo" (não recomendado para muitos
+                registros) e compare com o carregamento paginado.
+              </p>
+              <button
+                className="btn btn-info mr-2"
+                onClick={() => this.loadConsultas(1)}
+                disabled={this.state.loading}
+              >
+                Recarregar Páginado
+              </button>
+              <button
+                className="btn btn-warning"
+                onClick={this.loadAllConsultasForBenchmark}
+                disabled={this.state.loading}
+              >
+                Carregar Tudo (para Benchmark)
+              </button>
+              {this.state.loading && (
+                <div className="text-center mt-3">
+                  <div
+                    className="spinner-border spinner-border-sm text-secondary"
+                    role="status"
+                  >
+                    <span className="sr-only">Carregando...</span>
+                  </div>
+                  <small className="ml-2">
+                    Executando carregamento completo...
+                  </small>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Chamada para o benchmark do idMedico */}
+          {this.renderSpecificBenchmark(
+            "Otimização por ID do Médico",
+            "Compara o desempenho de buscar consultas por ID do Médico antes e depois de criar um índice em 'idMedico'.",
+            "SELECT * FROM Consulta WHERE idMedico = [VALUE];",
+            "benchmark/create-index-medico",
+            "indexMedico",
+            "Ex: CRM de um médico com muitas consultas"
+          )}
+
+          {/* Chamada para o benchmark de Data */}
+          {this.renderSpecificBenchmark(
+            "Otimização por Data da Consulta",
+            "Compara o desempenho de buscar consultas por Data antes e depois de criar um índice em 'DATA'.",
+            "SELECT * FROM Consulta WHERE DATA = '[VALUE]';",
+            "benchmark/create-index-data",
+            "indexData",
+            "Ex: 2023-05-15 (formato YYYY-MM-DD)"
+          )}
+
+          {/* Chamada para popular consultas */}
+          <div className="card mt-3">
+            <div className="card-body">
+              <h5 className="card-title">
+                Popular Tabela de Consultas (100K registros)
+              </h5>
+              <p className="card-text">
+                Utilize este botão APENAS para popular a tabela 'Consulta' com
+                100.000 registros para testes de desempenho. Certifique-se de
+                que há pacientes, médicos e especialidades cadastrados.
+              </p>
+              <button
+                className="btn btn-danger"
+                onClick={this.populateConsultasForBenchmark}
+                disabled={this.state.benchmarkLoading}
+              >
+                Popular 100K Consultas
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // NOVA FUNÇÃO: Para carregar todas as consultas (benchmark)
+  loadAllConsultasForBenchmark = async () => {
+    this.setState({ loading: true }); // Usar o loading geral
+
     try {
-      await axios.post(`${baseUrl}benchmark/create-index`);
-      alert("Índice criado com sucesso.");
-    } catch (err) {
-      alert("Erro ao criar índice");
+      const startTime = performance.now();
+      // Chamar a rota de consultas com um limite altíssimo
+      const response = await axios.get(`${baseUrl}consultas`, {
+        params: { limit: 99999999 },
+      });
+      const endTime = performance.now();
+
+      const timeTaken = (endTime - startTime).toFixed(2);
+      alert(
+        `Carregamento COMPLETO de ${response.data.data.length} consultas concluído em ${timeTaken} ms.`
+      );
+      console.log(
+        `Carregamento COMPLETO de ${response.data.data.length} consultas concluído em ${timeTaken} ms.`
+      );
+
+      this.setState({ loading: false });
+    } catch (error) {
+      console.error(
+        "Erro ao carregar todas as consultas para benchmark:",
+        error
+      );
+      alert(
+        "Erro ao carregar todas as consultas para benchmark. Verifique o console."
+      );
+      this.setState({ loading: false });
+    }
+  };
+
+  // NOVA FUNÇÃO: Para popular consultas
+  populateConsultasForBenchmark = async () => {
+    if (
+      !window.confirm(
+        "Isso irá inserir 100.000 registros na tabela de Consultas. Confirma?"
+      )
+    ) {
+      return;
+    }
+    this.setState({ benchmarkLoading: true });
+    try {
+      const response = await axios.post(
+        `${baseUrl}benchmark/populate-consultas`,
+        { numRecords: 100000 }
+      );
+      alert(response.data.message);
+      this.setState({ benchmarkLoading: false });
+      this.loadConsultas(1); // Recarregar a lista após popular
+    } catch (error) {
+      console.error(
+        "Erro ao popular consultas:",
+        (error.response && error.response.data) || error.message
+      );
+      alert(
+        `Erro ao popular consultas: ${
+          (error.response &&
+            error.response.data &&
+            error.response.data.details) ||
+          error.message
+        }`
+      );
+      this.setState({ benchmarkLoading: false });
     }
   };
 
   render() {
+    // MUDANÇA: A seção de benchmark agora é um componente separado, não depende de agendaOpen
     return (
       <Main {...headerProps}>
+        {/* Formulário de edição, só visível se agendaOpen for true */}
+        {this.state.agendaOpen &&
+          this.formAgenda(
+            this.generateTimeSlots("08:00", "18:00", 30),
+            this.state.dadosAgenda
+          )}
+
+        {/* Listagem de consultas e filtros, visível se agendaOpen for false */}
         {!this.state.agendaOpen && (
           <div>
             {this.renderFilters()}
@@ -819,14 +1155,8 @@ export default class RegisterMedico extends Component {
           </div>
         )}
 
-        {/* Formulário de edição */}
-        {this.state.agendaOpen &&
-          this.formAgenda(
-            this.generateTimeSlots("08:00", "18:00", 30),
-            this.state.dadosAgenda // ← Usar o estado atual
-          )}
-
-        {!this.state.agendaOpen && this.renderBenchmark()}
+        {/* Seção de Benchmark sempre visível (ou pode adicionar um toggle) */}
+        {this.renderBenchmarkSection()}
       </Main>
     );
   }
