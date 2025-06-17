@@ -11,90 +11,172 @@ const headerProps = {
 const baseUrl = "http://localhost:4040/medicos"; // URL mais específica
 const initialState = {
   user: {
-    name: "",
+    nomem: "",
     crm: "",
     telefone: "",
     percentual: "",
-    especialidade: "",
+    especialidade: "", // Código da especialidade
   },
   list: [],
   loading: false,
   error: null,
+  editar: false, // Controle de modo de edição
+  originalCrm: null, // Para guardar o CRM original na edição
+  // NOVA LÓGICA: Paginação
+  pagination: {
+    currentPage: 1,
+    itemsPerPage: 10, // Default 10 itens por página
+    totalItems: 0,
+    totalPages: 1,
+  },
+  // NOVA LÓGICA: Para exibir tempos de benchmark
+  benchmarkTimes: {
+    paginatedLoad: null,
+    fullLoad: null,
+  },
 };
 
 export default class RegisterMedico extends Component {
   state = { ...initialState };
 
-  // Mudança: componentWillMount está depreciado, usar componentDidMount
   componentDidMount() {
-    this.loadMedicos();
+    this.loadMedicos(); // Carrega a primeira página por padrão
   }
 
-  // Função separada para carregar médicos com tratamento de erro
-  loadMedicos() {
-    this.setState({ loading: true, error: null });
+  // NOVA LÓGICA: Função para carregar médicos com paginação
+  loadMedicos = async (page = this.state.pagination.currentPage) => {
+    this.setState({
+      loading: true,
+      error: null,
+      benchmarkTimes: {
+        ...this.state.benchmarkTimes,
+        paginatedLoad: null,
+        fullLoad: null,
+      },
+    });
 
-    axios
-      .get(baseUrl)
-      .then((resp) => {
-        console.log("Dados recebidos:", resp.data); // Para debug
-        this.setState({
-          list: resp.data || [],
-          loading: false,
-        });
-      })
-      .catch((error) => {
-        console.error("Erro ao carregar médicos:", error);
-        this.setState({
-          error: "Erro ao carregar a lista de médicos",
-          loading: false,
-          list: [],
-        });
+    try {
+      const { itemsPerPage } = this.state.pagination;
+      const startTime = performance.now(); // Início da medição
+      const response = await axios.get(baseUrl, {
+        params: {
+          page,
+          limit: itemsPerPage,
+        },
       });
-  }
+      const endTime = performance.now(); // Fim da medição
+
+      const medicos = response.data.data || []; // A API agora retorna data: []
+
+      this.setState({
+        list: medicos,
+        pagination: {
+          currentPage: response.data.page,
+          itemsPerPage: response.data.itemsPerPage,
+          totalItems: response.data.total,
+          totalPages: response.data.totalPages,
+        },
+        loading: false,
+        benchmarkTimes: {
+          ...this.state.benchmarkTimes,
+          paginatedLoad: `${(endTime - startTime).toFixed(2)} ms`, // Tempo de carregamento paginado
+        },
+      });
+    } catch (error) {
+      console.error("Erro ao buscar médicos:", error);
+      this.setState({
+        loading: false,
+        error: "Não foi possível carregar os médicos.",
+      });
+    }
+  };
+
+  // NOVA LÓGICA: Função para carregar todos os médicos (para benchmark de comparação)
+  loadAllMedicosForBenchmark = async () => {
+    this.setState({
+      loading: true,
+      benchmarkTimes: {
+        ...this.state.benchmarkTimes,
+        paginatedLoad: null,
+        fullLoad: null,
+      },
+    });
+    try {
+      const startTime = performance.now(); // Início da medição
+      const response = await axios.get(baseUrl, { params: { limit: 999999 } }); // Limite bem alto para "todos"
+      const endTime = performance.now(); // Fim da medição
+
+      console.log(
+        `Carregamento COMPLETO para benchmark: ${
+          response.data.data.length
+        } médicos em ${(endTime - startTime).toFixed(2)} ms`
+      );
+
+      this.setState({
+        loading: false,
+        benchmarkTimes: {
+          ...this.state.benchmarkTimes,
+          fullLoad: `${(endTime - startTime).toFixed(2)} ms`, // Tempo de carregamento completo
+        },
+      });
+      alert(
+        "Carregamento completo para benchmark concluído. Verifique os tempos de benchmark abaixo."
+      );
+    } catch (error) {
+      console.error("Erro ao carregar todos os médicos para benchmark:", error);
+      alert("Erro ao carregar todos os médicos para benchmark.");
+      this.setState({ loading: false });
+    }
+  };
 
   clear() {
-    this.setState({ user: initialState.user });
+    this.setState({
+      user: initialState.user,
+      editar: false,
+      originalCrm: null,
+    });
   }
 
   save() {
     const user = this.state.user;
+    const method = this.state.editar ? "put" : "post";
 
-    // Validação básica
-    if (!user.name || !user.crm) {
-      alert("Nome e CRM são obrigatórios!");
-      return;
-    }
+    const url = this.state.editar
+      ? `${baseUrl}/${this.state.originalCrm}`
+      : baseUrl;
 
-    this.setState({ loading: true });
-
-    const method = user.id ? "put" : "post";
-    const url = user.id ? `${baseUrl}/${user.id}` : baseUrl;
-
-    axios[method](url, user)
+    axios({
+      method: method,
+      url: url,
+      data: { dados: user },
+    })
       .then((resp) => {
-        const list = this.getUpdatedList(resp.data);
-        this.setState({
-          user: initialState.user,
-          list,
-          loading: false,
-        });
-        alert(
-          user.id
-            ? "Médico atualizado com sucesso!"
-            : "Médico cadastrado com sucesso!"
-        );
+        alert("Médico salvo com sucesso!");
+        this.clear();
+        this.loadMedicos(this.state.pagination.currentPage); // Recarrega a página atual
       })
       .catch((error) => {
-        console.error("Erro ao salvar médico:", error);
-        this.setState({ loading: false });
-        alert("Erro ao salvar médico!");
+        // Captura o erro para exibir mensagens mais específicas
+        console.error(
+          "Erro ao salvar médico:",
+          (error.response && error.response.data) || error.message
+        );
+        const errorMessage =
+          (error.response &&
+            error.response.data &&
+            error.response.data.message) ||
+          "Erro desconhecido ao salvar médico.";
+        alert(`Erro: ${errorMessage}`);
       });
   }
 
+  // getUpdatedList não é mais estritamente necessário, pois loadMedicos recarrega a lista.
+  // Pode ser removido se não for usado em mais nenhum lugar.
   getUpdatedList(user, add = true) {
-    const list = this.state.list.filter((u) => u.id !== user.id);
-    if (add) list.unshift(user);
+    const list = this.state.list.filter((u) => u.crm !== user.crm);
+    if (add) {
+      list.unshift(user);
+    }
     return list;
   }
 
@@ -105,7 +187,7 @@ export default class RegisterMedico extends Component {
   }
 
   renderForm() {
-    const { user, loading } = this.state;
+    const { user, loading, editar } = this.state; // Adicione 'editar' à desestruturação
 
     return (
       <div className="form">
@@ -116,8 +198,8 @@ export default class RegisterMedico extends Component {
               <input
                 type="text"
                 className="form-control"
-                name="name"
-                value={user.name}
+                name="nomem"
+                value={user.nomem}
                 onChange={(e) => this.updateField(e)}
                 placeholder="Digite o nome completo..."
                 disabled={loading}
@@ -135,7 +217,7 @@ export default class RegisterMedico extends Component {
                 value={user.crm}
                 onChange={(e) => this.updateField(e)}
                 placeholder="Digite o CRM..."
-                disabled={loading}
+                disabled={loading || editar} // Desabilita o CRM na edição
               />
             </div>
           </div>
@@ -194,9 +276,13 @@ export default class RegisterMedico extends Component {
             <button
               className="btn btn-primary"
               onClick={(e) => this.save(e)}
-              disabled={loading}
+              disabled={this.state.loading}
             >
-              {loading ? "Salvando..." : user.id ? "Atualizar" : "Cadastrar"}
+              {this.state.loading
+                ? "Salvando..."
+                : this.state.editar // Usa 'editar' para determinar o texto do botão
+                ? "Atualizar"
+                : "Cadastrar"}
             </button>
 
             <button
@@ -213,26 +299,37 @@ export default class RegisterMedico extends Component {
   }
 
   load(user) {
-    this.setState({ user });
+    this.setState({
+      user: { ...user, especialidade: user.especialidades || "" }, // Garante que a especialidade seja um código para o input
+      editar: true,
+      originalCrm: user.crm,
+    });
   }
 
   remove(user) {
     if (
-      !window.confirm(`Tem certeza que deseja excluir o médico ${user.name}?`)
+      !window.confirm(`Tem certeza que deseja excluir o médico ${user.nomem}?`)
     ) {
       return;
     }
 
     axios
-      .delete(`${baseUrl}/${user.id}`)
+      .delete(`${baseUrl}/${user.crm}`)
       .then((resp) => {
-        const list = this.getUpdatedList(user, false);
-        this.setState({ list });
+        this.loadMedicos(this.state.pagination.currentPage); // Recarrega a página atual após o delete
         alert("Médico removido com sucesso!");
       })
       .catch((error) => {
-        console.error("Erro ao remover médico:", error);
-        alert("Erro ao remover médico!");
+        console.error(
+          "Erro ao remover médico:",
+          (error.response && error.response.data) || error.message
+        );
+        const errorMessage =
+          (error.response &&
+            error.response.data &&
+            error.response.data.message) ||
+          "Erro desconhecido ao remover médico.";
+        alert(`Erro: ${errorMessage}`);
       });
   }
 
@@ -295,12 +392,11 @@ export default class RegisterMedico extends Component {
     return this.state.list.map((medico) => {
       return (
         <tr key={medico.crm}>
-          <td>{medico.name || medico.nomem}</td>{" "}
-          {/* Flexibilidade para diferentes nomes de campo */}
+          <td>{medico.nomem}</td> {/* Use nomem diretamente */}
           <td>{medico.crm}</td>
           <td>{medico.telefone}</td>
           <td>{medico.percentual}%</td>
-          <td>{medico.especialidade}</td>
+          <td>{medico.especialidades || "N/A"}</td>
           <td>
             <button
               className="btn btn-warning btn-sm mr-2"
@@ -322,11 +418,177 @@ export default class RegisterMedico extends Component {
     });
   }
 
+  // NOVA LÓGICA: Função para renderizar o seletor de itens por página
+  renderPageSizeSelector() {
+    const pageSizes = [5, 10, 20, 50];
+    const { itemsPerPage } = this.state.pagination;
+
+    return (
+      <div className="mb-3 d-flex align-items-center">
+        <label className="mr-2 mb-0">Itens por página:</label>
+        <select
+          className="form-control form-control-sm w-auto"
+          value={itemsPerPage}
+          onChange={(e) => {
+            this.setState(
+              (prevState) => ({
+                pagination: {
+                  ...prevState.pagination,
+                  itemsPerPage: parseInt(e.target.value, 10),
+                  currentPage: 1, // Volta para a primeira página ao mudar o tamanho
+                },
+              }),
+              () => this.loadMedicos(1) // Recarrega com a nova configuração
+            );
+          }}
+        >
+          {pageSizes.map((size) => (
+            <option key={size} value={size}>
+              {size}
+            </option>
+          ))}
+        </select>
+      </div>
+    );
+  }
+
+  // NOVA LÓGICA: Função para renderizar a navegação da paginação
+  renderPagination() {
+    const { pagination } = this.state;
+    const { currentPage, totalPages } = pagination;
+
+    if (totalPages <= 1) return null;
+
+    const pageNumbers = [];
+    const maxVisiblePages = 5;
+
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+    if (endPage - startPage + 1 < maxVisiblePages) {
+      startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pageNumbers.push(i);
+    }
+
+    return (
+      <nav aria-label="Navegação de páginas">
+        <ul className="pagination justify-content-center mt-4">
+          <li className={`page-item ${currentPage === 1 ? "disabled" : ""}`}>
+            <button className="page-link" onClick={() => this.loadMedicos(1)}>
+              Primeira
+            </button>
+          </li>
+          <li className={`page-item ${currentPage === 1 ? "disabled" : ""}`}>
+            <button
+              className="page-link"
+              onClick={() => this.loadMedicos(currentPage - 1)}
+            >
+              Anterior
+            </button>
+          </li>
+
+          {pageNumbers.map((number) => (
+            <li
+              key={number}
+              className={`page-item ${currentPage === number ? "active" : ""}`}
+            >
+              <button
+                className="page-link"
+                onClick={() => this.loadMedicos(number)}
+              >
+                {number}
+              </button>
+            </li>
+          ))}
+
+          <li
+            className={`page-item ${
+              currentPage === totalPages ? "disabled" : ""
+            }`}
+          >
+            <button
+              className="page-link"
+              onClick={() => this.loadMedicos(currentPage + 1)}
+            >
+              Próxima
+            </button>
+          </li>
+          <li
+            className={`page-item ${
+              currentPage === totalPages ? "disabled" : ""
+            }`}
+          >
+            <button
+              className="page-link"
+              onClick={() => this.loadMedicos(totalPages)}
+            >
+              Última
+            </button>
+          </li>
+        </ul>
+        <div className="text-center">
+          <small className="text-muted">
+            Página {currentPage} de {totalPages} | Total de{" "}
+            {this.state.pagination.totalItems} médicos
+          </small>
+        </div>
+      </nav>
+    );
+  }
+
+  // NOVA LÓGICA: Renderizar a seção de benchmark para médicos
+  renderBenchmarkSection() {
+    const { benchmarkTimes, loading } = this.state;
+    return (
+      <div className="card mt-5">
+        <div className="card-body">
+          <h5 className="card-title">Benchmark de Carregamento de Médicos</h5>
+          <p className="card-text">
+            Compare o tempo de carregamento com e sem paginação.
+          </p>
+          <div className="mb-3">
+            <button
+              className="btn btn-info mr-2"
+              onClick={() => this.loadMedicos(1)}
+              disabled={loading}
+            >
+              Carregar Paginações ({benchmarkTimes.paginatedLoad || "N/A"})
+            </button>
+            <button
+              className="btn btn-warning"
+              onClick={this.loadAllMedicosForBenchmark}
+              disabled={loading}
+            >
+              Carregar Tudo ({benchmarkTimes.fullLoad || "N/A"})
+            </button>
+          </div>
+          {loading && (
+            <div className="text-center mt-3">
+              <div
+                className="spinner-border spinner-border-sm text-secondary"
+                role="status"
+              >
+                <span className="sr-only">Carregando...</span>
+              </div>
+              <small className="ml-2">Executando benchmark...</small>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   render() {
     return (
       <Main {...headerProps}>
         {this.renderForm()}
+        {this.renderPageSizeSelector()}
         {this.renderTable()}
+        {this.renderPagination()}
+        {this.renderBenchmarkSection()}
       </Main>
     );
   }

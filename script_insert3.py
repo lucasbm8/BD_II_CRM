@@ -440,6 +440,35 @@ def gerar_diagnostica_join():
                     id_diagnostica_counter += 1
     print(f"-> Arquivo '{filename}' criado com sucesso.")
 
+    
+def gerar_exerce_esp():
+    """Gera a relação entre Medico e Especialidade na tabela 'ExerceEsp'."""
+    print("Gerando registros para a tabela de relacionamento 'ExerceEsp'...")
+    filename = '8_insert_exerce_esp.txt'
+    
+    total_especialidades = len(ESPECIALIDADES_MEDICAS)
+    
+    with open(filename, mode='w', encoding='utf-8') as file:
+        # Itera sobre cada médico cadastrado
+        for id_medico in range(1, NUM_MEDICOS + 1):
+            # Define que cada médico terá entre 1 e 3 especialidades (um valor realista)
+            num_especialidades_medico = random.randint(1, 3)
+            
+            # Cria uma lista com todos os IDs de especialidades possíveis
+            lista_ids_especialidades = list(range(1, total_especialidades + 1))
+            
+            # Seleciona aleatoriamente as especialidades para o médico atual, sem repetição
+            ids_especialidades_selecionadas = random.sample(lista_ids_especialidades, num_especialidades_medico)
+            
+            # Cria o comando SQL para cada especialidade do médico
+            for id_especialidade in ids_especialidades_selecionadas:
+                sql_command = (
+                    f"INSERT INTO ExerceEsp (idMedico, idEspecial) VALUES "
+                    f"({id_medico}, {id_especialidade});\n"
+                )
+                file.write(sql_command)
+                
+    print(f"-> Arquivo '{filename}' criado com sucesso.")
 # --- Bloco de Execução Principal ---
 if __name__ == "__main__":
     print("=== GERADOR DE DADOS MÉDICOS REALISTAS ===\n")
@@ -449,16 +478,17 @@ if __name__ == "__main__":
     print("--- INICIANDO GERAÇÃO DE DADOS SQL ---\n")
     
     # Ordem de execução é crucial para respeitar as chaves estrangeiras
-    gerar_pacientes()
+    '''gerar_pacientes()
     gerar_medicos()
     gerar_especialidades()
     gerar_doencas()
     gerar_consultas()
-    gerar_diagnosticos()
+    gerar_diagnosticos()'''
+    gerar_exerce_esp() 
     
     print("\n--- GERANDO DADOS PARA TABELAS RESTANTES ---\n")
-    gerar_agendas()
-    gerar_diagnostica_join()
+    '''gerar_agendas()
+    gerar_diagnostica_join()'''
     
     print("\n=== GERAÇÃO DE DADOS CONCLUÍDA ===")
     print("📁 Os arquivos .txt estão prontos para serem importados no pgAdmin4 na ordem numérica.")

@@ -49,17 +49,6 @@ CREATE TABLE Doenca (
 );
 
 
-CREATE TABLE Diagnostico (
-  IdDiagnostico INT PRIMARY KEY,
-  IdDoenca INT NOT NULL,
-  idCon INT NOT NULL,
-  Observacoes VARCHAR(255),
-  TratamentoRecomendado VARCHAR(255),
-  RemediosReceitados VARCHAR(255),
-   CONSTRAINT FK_Diagnostico_Consulta FOREIGN KEY (idCon) REFERENCES Consulta(Codigo),
-  CONSTRAINT FK_Diagnostico_Doenca FOREIGN KEY (IdDoenca) REFERENCES Doenca(IdDoenca)
-);
-
 CREATE TABLE Consulta (
   Codigo INT PRIMARY KEY,
   HoraInic TIME NOT NULL,
@@ -76,6 +65,19 @@ CREATE TABLE Consulta (
   CONSTRAINT FK_Consulta_Medico FOREIGN KEY (idMedico) REFERENCES Medico(CRM)
 
 );
+
+CREATE TABLE Diagnostico (
+  IdDiagnostico INT PRIMARY KEY,
+  IdDoenca INT NOT NULL,
+  idCon INT NOT NULL,
+  Observacoes VARCHAR(255),
+  TratamentoRecomendado VARCHAR(255),
+  RemediosReceitados VARCHAR(255),
+  CONSTRAINT FK_Diagnostico_Consulta FOREIGN KEY (idCon) REFERENCES Consulta(Codigo),
+  CONSTRAINT FK_Diagnostico_Doenca FOREIGN KEY (IdDoenca) REFERENCES Doenca(IdDoenca)
+);
+
+
 
 CREATE TABLE ExerceEsp (
   idMedico INT NOT NULL,

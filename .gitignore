@@ -1,6 +1,7 @@
 # Ignorar arquivos/pastas comuns
 node_modules/
 TXTS/
+TXT/
 *.log
 dist/
 build/

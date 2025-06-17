@@ -1,0 +1,52 @@
+/* Consultas.module.css */
+.table-responsive {
+  max-height: 65vh;
+  overflow-y: auto;
+  margin-bottom: 20px;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+}
+
+.table {
+  margin-bottom: 0;
+}
+
+.table thead th {
+  position: sticky;
+  top: 0;
+  background-color: #343a40;
+  color: white;
+  z-index: 10;
+}
+
+.spinner-border {
+  width: 3rem;
+  height: 3rem;
+  border-width: 0.25em;
+}
+
+.page-item.active .page-link {
+  background-color: #007bff;
+  border-color: #007bff;
+}
+
+.page-link {
+  color: #007bff;
+  min-width: 40px;
+  text-align: center;
+}
+
+.filter-card {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.filter-card .card-title {
+  font-size: 1.1rem;
+  color: #495057;
+}
+
+.form-control-sm {
+  height: calc(1.5em + 0.5rem + 2px);
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+}
