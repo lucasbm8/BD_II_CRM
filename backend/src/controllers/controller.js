@@ -179,12 +179,10 @@ exports.updateMedico = async (req, res) => {
         .status(400)
         .send({ message: "A Especialidade informada não existe." });
     }
-    res
-      .status(500)
-      .send({
-        message: "Erro interno ao atualizar médico.",
-        details: error.message,
-      });
+    res.status(500).send({
+      message: "Erro interno ao atualizar médico.",
+      details: error.message,
+    });
   } finally {
     client.release();
   }
@@ -604,24 +602,51 @@ exports.deleteConsulta = async (req, res) => {
 };
 
 //Funções pacientes
-// GET - Exibir todos os pacientes
+/**
+ * GET - Exibe todos os pacientes com suporte a paginação, ordenados do mais recente para o mais antigo.
+ * @param {object} req.query - Parâmetros de query para paginação (page, limit)
+ */
 exports.showPacientes = async (req, res) => {
   try {
-    console.log("Buscando pacientes...");
-    const response = await db.query("SELECT * FROM paciente ORDER BY nomep");
-    console.log(`Encontrados ${response.rows.length} pacientes.`);
-    res.status(200).send(response.rows);
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10;
+    const offset = (page - 1) * limit;
+
+    // Query para buscar os pacientes com paginação
+    const patientsQuery = `
+      SELECT * FROM paciente 
+      ORDER BY codigop DESC -- ALTERADO: Ordena por codigop (código do paciente) DESCENDENTE
+      LIMIT $1 OFFSET $2;
+    `;
+    // Query para contar o total de pacientes (sem paginação)
+    const countQuery = `
+      SELECT COUNT(*) FROM paciente;
+    `;
+
+    const [patientsResult, totalResult] = await Promise.all([
+      db.query(patientsQuery, [limit, offset]),
+      db.query(countQuery),
+    ]);
+
+    const totalItems = parseInt(totalResult.rows[0].count, 10);
+    const totalPages = Math.ceil(totalItems / limit);
+
+    res.status(200).json({
+      data: patientsResult.rows,
+      total: totalItems,
+      page: page,
+      totalPages: totalPages,
+      itemsPerPage: limit,
+    });
   } catch (error) {
-    console.error("Erro ao buscar pacientes:", error);
+    console.error("Erro ao buscar pacientes com paginação:", error);
     res.status(500).send("Erro ao buscar pacientes");
   }
 };
 
-// POST - Adicionar paciente
 exports.addPaciente = async (req, res) => {
   try {
     const { codigop, cpf, nomep, endereco, idade, sexo, telefone } = req.body;
-
     if (
       !codigop ||
       !cpf ||
@@ -631,69 +656,106 @@ exports.addPaciente = async (req, res) => {
       !sexo ||
       !telefone
     ) {
-      return res.status(400).send("Todos os campos são obrigatórios");
+      return res.status(400).send("Todos os campos são obrigatórios.");
     }
-
     const response = await db.query(
       `INSERT INTO paciente (codigop, cpf, nomep, endereco, idade, sexo, telefone)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *;`,
       [codigop, cpf, nomep, endereco, idade, sexo, telefone]
     );
-
     res.status(201).send(response.rows[0]);
   } catch (error) {
     console.error("Erro ao adicionar paciente:", error);
+    if (error.code === "23505") {
+      return res.status(409).send("CPF já cadastrado.");
+    }
     res.status(500).send("Erro ao adicionar paciente");
   }
 };
 
-// PUT - Atualizar paciente
 exports.updatePaciente = async (req, res) => {
   try {
     const { codigop } = req.params;
     const { cpf, nomep, endereco, idade, sexo, telefone } = req.body;
-
     const response = await db.query(
       `UPDATE paciente
        SET cpf = $1, nomep = $2, endereco = $3, idade = $4, sexo = $5, telefone = $6
        WHERE codigop = $7
-       RETURNING *`,
+       RETURNING *;`,
       [cpf, nomep, endereco, idade, sexo, telefone, codigop]
     );
-
     if (response.rowCount === 0) {
-      return res.status(404).send("Paciente não encontrado");
+      return res.status(404).send("Paciente não encontrado.");
     }
-
     res.status(200).send(response.rows[0]);
   } catch (error) {
     console.error("Erro ao atualizar paciente:", error);
+    if (error.code === "23505") {
+      return res
+        .status(409)
+        .send("O novo CPF informado já pertence a outro paciente.");
+    }
     res.status(500).send("Erro ao atualizar paciente");
   }
 };
 
-// DELETE - Deletar paciente
 exports.deletePaciente = async (req, res) => {
   const { codigop } = req.params;
-
+  const client = await db.connect();
   try {
-    // Primeiro remove as consultas relacionadas ao paciente
-    await db.query("DELETE FROM consulta WHERE idPaciente = $1", [codigop]);
-
-    // Depois remove o paciente
-    const deletePaciente = await db.query(
-      "DELETE FROM paciente WHERE codigop = $1",
+    await client.query("BEGIN");
+    await client.query(
+      `
+      DELETE FROM diagnostica
+      WHERE idDiagn IN (
+          SELECT IdDiagnostico
+          FROM Diagnostico
+          WHERE idCon IN (
+              SELECT Codigo FROM Consulta WHERE idPaciente = $1
+          )
+      );
+      `,
       [codigop]
     );
-
-    if (deletePaciente.rowCount === 0) {
+    await client.query(
+      `
+      DELETE FROM Diagnostico
+      WHERE idCon IN (
+          SELECT Codigo FROM Consulta WHERE idPaciente = $1
+      );
+      `,
+      [codigop]
+    );
+    await client.query(
+      `
+      DELETE FROM Consulta
+      WHERE idPaciente = $1;
+      `,
+      [codigop]
+    );
+    const result = await client.query(
+      `
+      DELETE FROM Paciente
+      WHERE CodigoP = $1
+      RETURNING *;
+      `,
+      [codigop]
+    );
+    if (result.rowCount === 0) {
+      await client.query("ROLLBACK");
       return res.status(404).send("Paciente não encontrado.");
     }
-
-    return res.status(204).send(); // sucesso sem conteúdo
+    await client.query("COMMIT");
+    return res.status(200).send({ message: "Paciente deletado com sucesso!" });
   } catch (error) {
+    await client.query("ROLLBACK");
     console.error("Erro ao deletar paciente:", error);
-    return res.status(500).send("Erro ao deletar paciente");
+    return res.status(500).send({
+      message: "Erro interno ao deletar paciente.",
+      details: error.message,
+    });
+  } finally {
+    client.release();
   }
 };
 

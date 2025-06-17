@@ -27,11 +27,21 @@ router.post("/cadastrarEspecialidade", controller.addEspecialidade);
 router.put("/atualizarEspecialidade/:codigo", controller.updateEspecialidade);
 router.delete("/removerEspecialidade/:codigo", controller.deleteEspecialidade);
 
-//Rotas de pacientes
-router.get("/paciente", controller.showPacientes);
-router.post("/paciente", controller.addPaciente);
-router.put("/paciente/:codigop", controller.updatePaciente);
-router.delete("/paciente/:codigop", controller.deletePaciente);
+// ==============================
+// ROTAS PARA PACIENTES (Verifique a URL, alterada para plural)
+// ==============================
+
+// GET: Lista todos os pacientes com paginação
+router.get("/pacientes", controller.showPacientes); // Caminho atualizado para /pacientes
+
+// POST: Adiciona um novo paciente
+router.post("/pacientes", controller.addPaciente);
+
+// PUT: Atualiza um paciente existente (CódigoP no parâmetro da URL)
+router.put("/pacientes/:codigop", controller.updatePaciente);
+
+// DELETE: Deleta um paciente e suas referências em tabelas filhas (CódigoP no parâmetro da URL)
+router.delete("/pacientes/:codigop", controller.deletePaciente);
 
 // Rotas de consultas
 
