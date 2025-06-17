@@ -2,6 +2,7 @@ const router = require("express-promise-router")();
 const controller = require("../controllers/controller");
 
 // ROTAS ClinicPlus
+//Rotas para Registro de Médicos
 router.get("/medicos", controller.showMedicos);
 router.post("/medicos", controller.addMedico);
 router.put("/medicos", controller.updateMedico);

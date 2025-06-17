@@ -1,20 +1,39 @@
 const db = require("../config/database");
 
+// controller.js
+
 exports.showMedicos = async (req, res) => {
   try {
-    const response = await db.query("select * from medico");
+    const query = `
+      SELECT 
+        m.crm, 
+        m.nomem, 
+        m.telefone, 
+        m.percentual, 
+        STRING_AGG(e.nomee, ', ') AS especialidades
+      FROM 
+        medico m
+      LEFT JOIN 
+        exerceesp ee ON m.crm = ee.idmedico
+      LEFT JOIN 
+        especialidade e ON ee.idespecial = e.codigo
+      GROUP BY 
+        m.crm, m.nomem, m.telefone, m.percentual
+      ORDER BY
+        m.crm DESC; -- AQUI ESTÁ A MUDANÇA: Ordena por CRM do maior para o menor
+    `;
+
+    const response = await db.query(query);
     res.status(200).send(response.rows);
   } catch (error) {
     console.error("Erro ao buscar medicos:", error);
     res.status(500).send("Erro ao buscar medicos");
   }
 };
-
 // POST - Adicionar medico
 exports.addMedico = async (req, res) => {
   try {
-      const { dados } = req.body;
-
+    const { dados } = req.body;
 
     const response = await db.query(
       `INSERT INTO medico (CRM, NOMEM, TELEFONE, PERCENTUAL)
@@ -31,7 +50,7 @@ exports.addMedico = async (req, res) => {
 // POST - Adicionar medico
 exports.updateMedico = async (req, res) => {
   try {
-      const { dados } = req.body;
+    const { dados } = req.body;
     const response = await db.query(
       `update  medico set  NOMEM =$2,TELEFONE =$3, PERCENTUAL =$4
       where CRM = $1`,

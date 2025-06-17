@@ -20,7 +20,7 @@ const initialState = {
   list: [],
   loading: false,
   error: null,
-  editar: false
+  editar: false,
 };
 
 export default class RegisterMedico extends Component {
@@ -38,19 +38,19 @@ export default class RegisterMedico extends Component {
     axios
       .get(baseUrl)
       .then((resp) => {
-        console.log("Dados recebidos:", resp.data); // Para debug
+        console.log("Dados recebidos:", resp.data);
+        const medicos = resp.data || [];
+
+        // Adicione esta linha para ordenar a lista pelo CRM (do maior para o menor)
+        medicos.sort((a, b) => b.crm - a.crm);
+
         this.setState({
-          list: resp.data || [],
+          list: medicos, // A lista agora está ordenada
           loading: false,
         });
       })
       .catch((error) => {
-        console.error("Erro ao carregar médicos:", error);
-        this.setState({
-          error: "Erro ao carregar a lista de médicos",
-          loading: false,
-          list: [],
-        });
+        // ...
       });
   }
 
@@ -58,31 +58,29 @@ export default class RegisterMedico extends Component {
     this.setState({ user: initialState.user });
   }
 
+  save() {
+    const user = this.state.user;
+    const method = this.state.editar ? "put" : "post";
+    console.log("dados user");
+    console.log(user);
+    console.log(method);
+    const url = user.codigop ? `${baseUrl}/${user.codigop}` : baseUrl;
 
-   save() {
-      const user = this.state.user;
-      const method = this.state.editar ? "put" : "post";
-       console.log("dados user")
-      console.log(user)
-       console.log(method)
-       const url = user.codigop ? `${baseUrl}/${user.codigop}` : baseUrl;
+    console.log(url);
 
-   console.log(url)
-
-     axios({
-                 method: method,
-                 url: url,
-                 data: { dados: user } 
-             })
-          .then((resp) => {
-            const list = this.getUpdatedList(resp.data);
-            this.setState({ user: initialState.user, list });
-             this.loadMedicos() 
-                  this.setState({ editar: true });
-          })
-          .catch((err) => console.error("Erro ao salvar medico:", err));
-    }
-
+    axios({
+      method: method,
+      url: url,
+      data: { dados: user },
+    })
+      .then((resp) => {
+        const list = this.getUpdatedList(resp.data);
+        this.setState({ user: initialState.user, list });
+        this.loadMedicos();
+        this.setState({ editar: true });
+      })
+      .catch((err) => console.error("Erro ao salvar medico:", err));
+  }
 
   getUpdatedList(user, add = true) {
     const list = this.state.list.filter((u) => u.id !== user.id);
@@ -205,8 +203,8 @@ export default class RegisterMedico extends Component {
   }
 
   load(user) {
-    console.log(user)
-      this.setState({ editar: true });
+    console.log(user);
+    this.setState({ editar: true });
     this.setState({ user });
   }
 
@@ -289,12 +287,12 @@ export default class RegisterMedico extends Component {
     return this.state.list.map((medico) => {
       return (
         <tr key={medico.crm}>
-          <td>{medico.name || medico.nomem}</td>{" "}
-          {/* Flexibilidade para diferentes nomes de campo */}
+          <td>{medico.name || medico.nomem}</td>
           <td>{medico.crm}</td>
           <td>{medico.telefone}</td>
           <td>{medico.percentual}%</td>
-          <td>{medico.especialidade}</td>
+          {/* AQUI ESTÁ A MUDANÇA: Use o campo 'especialidades' que vem da nova API */}
+          <td>{medico.especialidades || "N/A"}</td>
           <td>
             <button
               className="btn btn-warning btn-sm mr-2"
