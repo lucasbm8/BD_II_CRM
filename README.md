@@ -106,7 +106,7 @@ Para uma configuração mais simples, configure a senha do usuário padrão do P
     npm run dev
     ```
 
-    O backend será iniciado, geralmente na porta `3001`.
+    O backend será iniciado, geralmente na porta `4040`. Se atente a isso para alterar no codigo dependendo de qual porta iniciar.
 
 ### 4\. Configuração e Execução do Frontend
 
