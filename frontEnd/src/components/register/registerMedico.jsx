@@ -11,7 +11,7 @@ const headerProps = {
 const baseUrl = "http://localhost:4040/medicos"; // URL mais específica
 const initialState = {
   user: {
-    name: "",
+    nomem: "",
     crm: "",
     telefone: "",
     percentual: "",
@@ -21,6 +21,7 @@ const initialState = {
   loading: false,
   error: null,
   editar: false,
+  originalCrm: null,
 };
 
 export default class RegisterMedico extends Component {
@@ -55,36 +56,50 @@ export default class RegisterMedico extends Component {
   }
 
   clear() {
-    this.setState({ user: initialState.user });
+    this.setState({
+      user: initialState.user,
+      editar: false,
+      originalCrm: null,
+    });
   }
 
   save() {
     const user = this.state.user;
     const method = this.state.editar ? "put" : "post";
-    console.log("dados user");
-    console.log(user);
-    console.log(method);
-    const url = user.codigop ? `${baseUrl}/${user.codigop}` : baseUrl;
 
-    console.log(url);
+    // MUDANÇA CRÍTICA: Use o `originalCrm` para a URL de update
+    const url = this.state.editar
+      ? `${baseUrl}/${this.state.originalCrm}`
+      : baseUrl;
 
     axios({
       method: method,
       url: url,
-      data: { dados: user },
+      data: { dados: user }, // O corpo da requisição leva os novos dados, incluindo o novo CRM
     })
       .then((resp) => {
-        const list = this.getUpdatedList(resp.data);
-        this.setState({ user: initialState.user, list });
+        alert("Médico salvo com sucesso!");
+        // Limpa tudo, incluindo o originalCrm
+        this.setState({
+          user: initialState.user,
+          editar: false,
+          originalCrm: null,
+        });
         this.loadMedicos();
-        this.setState({ editar: true });
       })
       .catch((err) => console.error("Erro ao salvar medico:", err));
   }
 
+  // CORREÇÃO: Altere a função para usar 'crm' como identificador
   getUpdatedList(user, add = true) {
-    const list = this.state.list.filter((u) => u.id !== user.id);
-    if (add) list.unshift(user);
+    // Filtra a lista removendo o usuário antigo (se existir) pelo CRM
+    const list = this.state.list.filter((u) => u.crm !== user.crm);
+
+    // Adiciona o usuário novo/atualizado no topo da lista
+    if (add) {
+      list.unshift(user);
+    }
+
     return list;
   }
 
@@ -106,11 +121,11 @@ export default class RegisterMedico extends Component {
               <input
                 type="text"
                 className="form-control"
-                name="name"
-                value={user.nomem}
+                name="nomem" // MUDANÇA: de 'name' para 'nomem'
+                value={this.state.user.nomem} // MUDANÇA: acessando o estado correto
                 onChange={(e) => this.updateField(e)}
                 placeholder="Digite o nome completo..."
-                disabled={loading}
+                disabled={this.state.loading}
               />
             </div>
           </div>
@@ -184,9 +199,14 @@ export default class RegisterMedico extends Component {
             <button
               className="btn btn-primary"
               onClick={(e) => this.save(e)}
-              disabled={loading}
+              disabled={this.state.loading}
             >
-              {loading ? "Salvando..." : user.id ? "Atualizar" : "Cadastrar"}
+              {/* CORREÇÃO: Verifique user.crm em vez de user.id */}
+              {this.state.loading
+                ? "Salvando..."
+                : this.state.user.crm
+                ? "Atualizar"
+                : "Cadastrar"}
             </button>
 
             <button
@@ -203,21 +223,26 @@ export default class RegisterMedico extends Component {
   }
 
   load(user) {
-    console.log(user);
-    this.setState({ editar: true });
-    this.setState({ user });
+    this.setState({
+      user, // Coloca os dados do médico no formulário
+      editar: true, // Ativa o modo de edição
+      originalCrm: user.crm, // <-- ADICIONE ESTA LINHA para "lembrar" o CRM original
+    });
   }
 
   remove(user) {
+    // O window.confirm já deve estar usando user.nomem, o que está correto.
     if (
-      !window.confirm(`Tem certeza que deseja excluir o médico ${user.name}?`)
+      !window.confirm(`Tem certeza que deseja excluir o médico ${user.nomem}?`)
     ) {
       return;
     }
 
+    // CORREÇÃO: A URL do delete deve usar o CRM do médico
     axios
-      .delete(`${baseUrl}/${user.id}`)
+      .delete(`${baseUrl}/${user.crm}`)
       .then((resp) => {
+        // Aqui usamos a nossa função já corrigida para remover o usuário da lista
         const list = this.getUpdatedList(user, false);
         this.setState({ list });
         alert("Médico removido com sucesso!");

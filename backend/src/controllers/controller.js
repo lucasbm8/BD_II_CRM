@@ -31,36 +31,97 @@ exports.showMedicos = async (req, res) => {
   }
 };
 // POST - Adicionar medico
+// FUNÇÃO ATUALIZADA - Adicionar Médico
 exports.addMedico = async (req, res) => {
+  // Padronizando para receber nomem, igual ao banco de dados
+  const { nomem, crm, telefone, percentual, especialidade } = req.body.dados;
+
+  if (!nomem || !crm || !especialidade) {
+    return res.status(400).send({
+      message: "Nome, CRM e Código da Especialidade são obrigatórios.",
+    });
+  }
+
+  const client = await db.connect();
+
   try {
-    const { dados } = req.body;
+    await client.query("BEGIN"); // Inicia a transação
 
-    const response = await db.query(
-      `INSERT INTO medico (CRM, NOMEM, TELEFONE, PERCENTUAL)
-       VALUES ($1, $2, $3, $4)`,
-      [dados.crm, dados.name, dados.telefone, dados.percentual]
-    );
+    // 1. Insere na tabela Medico e retorna o médico criado
+    const medicoQuery = `
+        INSERT INTO Medico (crm, nomem, telefone, percentual) 
+        VALUES ($1, $2, $3, $4) 
+        RETURNING *
+    `; // Adicionado RETURNING *
+    const medicoValues = [crm, nomem, telefone, percentual];
+    const novoMedicoResult = await client.query(medicoQuery, medicoValues);
+    const medicoCriado = novoMedicoResult.rows[0];
 
-    res.status(201).send(response.rows[0]);
+    // 2. Insere na tabela ExerceEsp para vincular a especialidade
+    const exerceEspQuery =
+      "INSERT INTO ExerceEsp (idMedico, idEspecial) VALUES ($1, $2)";
+    const exerceEspValues = [crm, especialidade];
+    await client.query(exerceEspQuery, exerceEspValues);
+
+    await client.query("COMMIT"); // Finaliza a transação
+
+    // A API agora retorna o objeto completo do médico que foi criado
+    res.status(201).send(medicoCriado);
   } catch (error) {
-    console.error("Erro ao adicionar medico:", error);
-    res.status(500).send("Erro ao adicionar medico");
+    await client.query("ROLLBACK");
+    console.error("Erro ao adicionar médico:", error);
+    // Verifica se é erro de chave duplicada (CRM já existe)
+    if (error.code === "23505") {
+      return res
+        .status(409)
+        .send({ message: "O CRM informado já está cadastrado." });
+    }
+    res.status(500).send({ message: "Erro interno ao adicionar médico." });
+  } finally {
+    client.release();
   }
 };
-// POST - Adicionar medico
+
+// FUNÇÃO ATUALIZADA - Atualizar Médico
 exports.updateMedico = async (req, res) => {
+  // O CRM original vem dos parâmetros da URL (ex: /medicos/102)
+  const originalCrm = req.params.crm;
+
+  // Os novos dados (incluindo o novo CRM) vêm do corpo da requisição
+  const { crm: novoCrm, nomem, telefone, percentual } = req.body.dados;
+
   try {
-    const { dados } = req.body;
     const response = await db.query(
-      `update  medico set  NOMEM =$2,TELEFONE =$3, PERCENTUAL =$4
-      where CRM = $1`,
-      [dados.crm, dados.nomem, dados.telefone, dados.percentual]
+      `-- A query agora atualiza o próprio CRM
+       UPDATE medico 
+       SET 
+         crm = $1,          -- O novo CRM
+         nomem = $2, 
+         telefone = $3, 
+         percentual = $4
+       WHERE 
+         crm = $5;          -- Condição com o CRM original
+      `,
+      [novoCrm, nomem, telefone, percentual, originalCrm] // A ordem dos parâmetros deve bater com a query
     );
 
-    res.status(201).send(response.rows[0]);
+    if (response.rowCount === 0) {
+      return res
+        .status(404)
+        .send({ message: "Médico não encontrado com o CRM original." });
+    }
+
+    // Retorna o objeto com os dados já atualizados
+    res.status(200).send({ crm: novoCrm, nomem, telefone, percentual });
   } catch (error) {
-    console.error("Erro ao adicionar medico:", error);
-    res.status(500).send("Erro ao adicionar medico");
+    console.error("Erro ao atualizar medico:", error);
+    // Erro comum se o novo CRM já existir
+    if (error.code === "23505") {
+      return res
+        .status(409)
+        .send({ message: "O novo CRM informado já pertence a outro médico." });
+    }
+    res.status(500).send("Erro ao atualizar medico");
   }
 };
 

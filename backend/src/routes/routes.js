@@ -5,7 +5,8 @@ const controller = require("../controllers/controller");
 //Rotas para Registro de Médicos
 router.get("/medicos", controller.showMedicos);
 router.post("/medicos", controller.addMedico);
-router.put("/medicos", controller.updateMedico);
+router.put("/medicos/:crm", controller.updateMedico);
+
 //router.get("/paciente", controller.showPacientes);
 router.post("/agendaMedico", controller.showAgendaPorMedicos);
 router.post("/AgendaCodigo", controller.showAgendaPorCodigo);

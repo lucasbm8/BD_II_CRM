@@ -12,6 +12,5 @@ pool.on("connect", () => {
   //console.log('Base de Dados conectado com sucesso!');
 });
 
-module.exports = {
-  query: (text, params) => pool.query(text, params),
-};
+// CORREÇÃO: Exporte o 'pool' inteiro para ter acesso a todas as suas funções
+module.exports = pool;
