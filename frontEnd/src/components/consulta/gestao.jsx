@@ -15,8 +15,9 @@ const controlers = {
   agenda: "AgendaCodigo",
   agendar: "agendarConsulta",
   atualizar: "atualizarDados",
-  listarConsultas: "listarConsultas", // Adicione esta linha
+  listarConsultas: "listarConsultas",
 };
+
 const initialState = {
   med: { nomem: "", crm: "" },
   dadosAgenda: {
@@ -32,12 +33,10 @@ const initialState = {
     formapagamento: "",
   },
   list: [],
-  consultas: [], // Adicione esta linha
+  consultas: [],
   agendaOpen: false,
   agenda: <div></div>,
   horarios: [],
-
-  consultas: [],
   pagination: {
     currentPage: 1,
     itemsPerPage: 20,
@@ -51,13 +50,24 @@ const initialState = {
     dataFim: "",
   },
   loading: false,
+  editMode: false, // Novo estado para controlar modo de edição
+  benchmarkWhere: "",
+  benchmarkPlan: null,
 };
+
 export default class RegisterMedico extends Component {
   state = { ...initialState };
 
   componentDidMount() {
     this.loadConsultas();
+    this.loadMedicos();
   }
+
+  loadMedicos = () => {
+    axios(baseUrl + controlers.medicos).then((resp) => {
+      this.setState({ list: resp.data });
+    });
+  };
 
   loadConsultas = async (page = 1) => {
     this.setState({ loading: true });
@@ -102,14 +112,7 @@ export default class RegisterMedico extends Component {
   };
 
   applyFilters = () => {
-
-  this.setState({
-         consultas: this.state.consultas.filter(x => x.nome_paciente === this.state.filters.nomePaciente),
-         }
-       );
-
-
-
+    this.loadConsultas(1); // Recarregar da primeira página com filtros
   };
 
   resetFilters = () => {
@@ -117,6 +120,7 @@ export default class RegisterMedico extends Component {
       {
         filters: {
           codigo: "",
+          nomePaciente: "",
           dataInicio: "",
           dataFim: "",
         },
@@ -124,6 +128,150 @@ export default class RegisterMedico extends Component {
       () => this.loadConsultas(1)
     );
   };
+
+  // FUNÇÃO DE EDIÇÃO: Pega os dados diretamente da tabela
+  handleEdit = (consulta) => {
+    // Calcular dia da semana (0 = domingo, 1 = segunda, etc.)
+    const dataConsulta = new Date(consulta.data);
+    const diasemana = dataConsulta.getDay();
+    console.log("Editando consulta:", consulta);
+
+    // Converter os dados da consulta para o formato do dadosAgenda
+    const dadosConsulta = {
+      codigo: consulta.codigo,
+      data: consulta.data,
+      horainic: consulta.horainic,
+      horafim: consulta.horafim,
+      idpaciente: consulta.idpaciente,
+      idespecial: consulta.idespecial,
+      idmedico: consulta.idmedico,
+      valorpago: consulta.valorpago,
+      pagou: consulta.pagou,
+      formapagamento: consulta.formapagamento,
+      diasemana: diasemana, // ← Adicionar o dia da semana
+    };
+
+    this.setState({
+      dadosAgenda: dadosConsulta,
+      editMode: true,
+      agendaOpen: true,
+      agenda: <div></div>, // ← Remover a renderização fixa
+    });
+  };
+
+  // FUNÇÃO CORRIGIDA: cancelEdit
+  cancelEdit = () => {
+    this.clear();
+  };
+
+  // FUNÇÃO CORRIGIDA: clear
+  clear = () => {
+    this.setState({
+      dadosAgenda: initialState.dadosAgenda,
+      agendaOpen: false,
+      editMode: false,
+    });
+  };
+
+  // FUNÇÃO CORRIGIDA: save
+  save = () => {
+    const dadosAgenda = this.state.dadosAgenda;
+
+    // Validações básicas
+    if (!dadosAgenda.codigo) {
+      alert("Código da consulta é obrigatório");
+      return;
+    }
+
+    if (!dadosAgenda.idpaciente || !dadosAgenda.idmedico) {
+      alert("Paciente e médico são obrigatórios");
+      return;
+    }
+
+    if (!dadosAgenda.data || !dadosAgenda.horainic || !dadosAgenda.horafim) {
+      alert("Data e horários são obrigatórios");
+      return;
+    }
+
+    const method = "post";
+    const url = baseUrl + controlers.atualizar;
+
+    console.log("Salvando dados:", dadosAgenda);
+
+    axios({
+      method: method,
+      url: url,
+      data: { dadosAgenda: dadosAgenda },
+    })
+      .then((resp) => {
+        console.log("Resultado da atualização:", resp);
+        alert("Consulta alterada com sucesso!");
+        this.clear();
+        this.loadConsultas(this.state.pagination.currentPage); // Recarregar a página atual
+      })
+      .catch((error) => {
+        console.error("Erro na requisição:", error);
+        alert("Erro ao atualizar consulta. Verifique o console para detalhes.");
+      });
+  };
+
+  updateFieldAgenda = (event) => {
+    const dadosAgenda = { ...this.state.dadosAgenda };
+    const { name, value } = event.target;
+
+    // Tratar conversões de tipo adequadamente
+    if (name === "pagou") {
+      dadosAgenda[name] =
+        value === "true" ? true : value === "false" ? false : value;
+    } else if (name === "valorpago") {
+      dadosAgenda[name] = value === "" ? "" : parseFloat(value) || 0;
+    } else {
+      dadosAgenda[name] = value;
+    }
+
+    // Se a data mudou, recalcular o dia da semana
+    if (name === "data" && value) {
+      const dataConsulta = new Date(value);
+      dadosAgenda.diasemana = dataConsulta.getDay();
+    }
+
+    this.setState({ dadosAgenda });
+  };
+
+  generateTimeSlots(startTime, endTime, interval) {
+    let timeSlots = [];
+    let start = new Date(`1970-01-01T${startTime}:00`);
+    let end = new Date(`1970-01-01T${endTime}:00`);
+
+    while (start <= end) {
+      let hours = start.getHours().toString().padStart(2, "0");
+      let minutes = start.getMinutes().toString().padStart(2, "0");
+      timeSlots.push(`${hours}:${minutes}:00`);
+      start.setMinutes(start.getMinutes() + interval);
+    }
+
+    return timeSlots;
+  }
+
+  formatDate(isoDate) {
+    if (!isoDate) return "";
+
+    const date = new Date(isoDate);
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
+
+  formatDateForInput(isoDate) {
+    if (!isoDate) return "";
+
+    const date = new Date(isoDate);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
 
   renderFilters() {
     const { filters } = this.state;
@@ -142,34 +290,11 @@ export default class RegisterMedico extends Component {
                   name="nomePaciente"
                   value={filters.nomePaciente}
                   onChange={this.handleFilterChange}
-                  placeholder="nome do paciente"
+                  placeholder="Nome do paciente"
                 />
               </div>
             </div>
-            <div className="col-md-3">
-              <div className="form-group">
-                <label>Data Início</label>
-                <input
-                  type="date"
-                  className="form-control"
-                  name="dataInicio"
-                  value={filters.dataInicio}
-                  onChange={this.handleFilterChange}
-                />
-              </div>
-            </div>
-            <div className="col-md-3">
-              <div className="form-group">
-                <label>Data Fim</label>
-                <input
-                  type="date"
-                  className="form-control"
-                  name="dataFim"
-                  value={filters.dataFim}
-                  onChange={this.handleFilterChange}
-                />
-              </div>
-            </div>
+
             <div className="col-md-3 d-flex align-items-end">
               <button
                 className="btn btn-primary mr-2"
@@ -219,393 +344,195 @@ export default class RegisterMedico extends Component {
       </div>
     );
   }
-  componentDidMount() {
-    this.loadConsultas();
-    axios(baseUrl + controlers.medicos).then((resp) => {
-      this.setState({ list: resp.data });
-    });
-  }
-
-  generateTimeSlots(startTime, endTime, interval) {
-    let timeSlots = [];
-    let start = new Date(`1970-01-01T${startTime}:00`);
-    let end = new Date(`1970-01-01T${endTime}:00`);
-
-    while (start <= end) {
-      let hours = start.getHours().toString().padStart(2, "0");
-      let minutes = start.getMinutes().toString().padStart(2, "0");
-      timeSlots.push(`${hours}:${minutes}:00`);
-      start.setMinutes(start.getMinutes() + interval);
-    }
-
-    return timeSlots;
-  }
-
-  findHorarios() {
-    const crm = this.state.dadosAgenda.crm;
-    const method = "post";
-    const url = baseUrl + controlers.agendaMedico;
-
-    axios({
-      method: method,
-      url: url,
-      data: { crm: crm },
-    })
-      .then((resp) => {
-        this.setState({ horarios: resp.data });
-        console.log(this.state.horarios);
-      })
-      .catch((error) => {
-        console.error("Erro na requisição:", error);
-      });
-  }
-
-  findAgenda() {
-    const codigo = this.state.dadosAgenda.codigo;
-    console.log("codigo; " + codigo);
-    const method = "post";
-    const url = baseUrl + controlers.agenda;
-
-    console.log("url; " + url);
-    axios({
-      method: method,
-      url: url,
-      data: { codigo: codigo },
-    })
-      .then((resp) => {
-        this.setState({ dadosAgenda: resp.data[0] });
-        console.log("dados agenda");
-        console.log(this.state.dadosAgenda);
-        this.atualizarCadastro();
-
-        //console.log(resp.data[0] );
-      })
-      .catch((error) => {
-        console.error("Erro na requisição:", error);
-      });
-  }
-
-  clear() {
-    this.setState({ dadosAgenda: initialState.dadosAgenda });
-    console.log(this.state.dadosAgenda);
-    this.setState({ agendaOpen: false });
-  }
-
-  save() {
-    const dadosAgenda = this.state.dadosAgenda;
-    const method = "post";
-    const url = baseUrl + controlers.atualizar;
-
-    axios({
-      method: method,
-      url: url,
-      data: { dadosAgenda: dadosAgenda },
-    })
-      .then((resp) => {
-        console.log("resultado atualização");
-        console.log(resp);
-        alert("Consulta alterada com sucesso ");
-        window.location.reload();
-      })
-      .catch((error) => {
-        console.error("Erro na requisição:", error);
-      });
-
-    this.clear();
-  }
-
-  getUpdatedList(med, add = true) {
-    const list = this.state.list.filter((u) => u.id !== med.id);
-    if (add) list.unshift(med);
-    return list;
-  }
-
-  updateField(event) {
-    const med = { ...this.state.med };
-    med[event.target.name] = event.target.value;
-    this.setState({ med });
-  }
-
-  updateFieldAgenda(event) {
-    const dadosAgenda = { ...this.state.dadosAgenda };
-    dadosAgenda[event.target.name] = event.target.value;
-    this.setState({ dadosAgenda });
-    console.log(dadosAgenda);
-  }
-
-  renderForm() {
-    return (
-      <div>
-        {this.formMedicoAgenda()}
-        {this.state.agendaOpen && this.state.agenda}
-      </div>
-    );
-  }
-  loadConsulta(codigo) {
-    this.setState(
-      {
-        dadosAgenda: { ...this.state.dadosAgenda, codigo: codigo },
-        agendaOpen: false,
-      },
-      () => {
-        this.findAgenda();
-      }
-    );
-  }
-
-  load(med) {
-    this.setState({ med });
-  }
-
-  remove(med) {
-    axios.delete(`${baseUrl}/${med.id}`).then((resp) => {
-      const list = this.getUpdatedList(med, false);
-      this.setState({ list });
-    });
-  }
-  listMedicos() {
-    return (
-      <div>
-        <h2>Selecione o Medico para consulta</h2>
-        <div className="form-medico-Data"></div>
-        <select
-          className="form-control"
-          onChange={(e) => this.atualizarAgenda(e.target.value)}
-        >
-          <option key={0} value={0}>
-            Selecione
-          </option>
-          {this.state.list.map((med) => {
-            let styles = {
-              width: "35px",
-            };
-            return (
-              <option key={med.crm} value={med.nomem}>
-                {med.nomem}
-              </option>
-            );
-          })}
-        </select>
-      </div>
-    );
-  }
 
   formMedicoAgenda() {
+    if (this.state.editMode) return null; // Não mostrar busca quando em modo de edição
+
     return (
       <div className="form">
         <div className="row">
           <div className="col-12 col-md-6">
             <div className="form-group">
-              <label>Codigo da consulta</label>
+              <label>Código da consulta</label>
               <input
                 type="text"
                 className="form-control"
                 name="codigo"
-                onChange={(e) => this.updateFieldAgenda(e)}
+                value={this.state.dadosAgenda.codigo}
+                onChange={this.updateFieldAgenda}
+                placeholder="Digite o código da consulta"
               />
             </div>
           </div>
-
-          <button
-            className="btn btn-primary"
-            onClick={(e) => this.findAgenda(this.state.dadosAgenda.codigo)}
-          >
-            Buscar
-          </button>
+          <div className="col-12 col-md-6 d-flex align-items-end">
+            <button
+              className="btn btn-primary"
+              onClick={() => this.findAgenda()}
+            >
+              Buscar
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
-  formatDate(isoDate) {
-    const date = new Date(isoDate);
-
-    const day = String(date.getUTCDate()).padStart(2, "0");
-    const month = String(date.getUTCMonth() + 1).padStart(2, "0"); // Os meses são baseados em zero,
-    const year = date.getUTCFullYear();
-
-    return `${day}/${month}/${year}`;
-  }
-  async atualizarCadastro() {
-    var listHorarios = this.generateTimeSlots("08:00", "18:00", 30);
-    var dados = this.state.dadosAgenda;
-    dados.data = this.formatDate(dados.data);
-
-    this.setState({ agenda: this.formAgenda(listHorarios, dados) });
-
-    this.setState({ agendaOpen: true });
-    console.log(this.state.dadosAgenda);
-  }
   formAgenda(listHorarios, dados) {
     return (
-      <div>
-        <div className="form">
-          <div className="row">
-            <div className="col-12 col-md-6">
-              <div className="form-group">
-                <label>Data</label>
-                <input
-                  value={dados.data}
-                  type="text"
-                  className="form-control"
-                  name="data"
-                  onChange={(e) => this.updateFieldAgenda(e)}
-                />
-              </div>
-            </div>
-
-            <div className="col-12 col-md-6">
-              <div className="form-group">
-                <label>Medico:</label>
-                <select
-                  value={dados.idmedico}
-                  className="form-control"
-                  name="crm"
-                  onChange={(e) => this.updateFieldAgenda(e)}
-                >
-                  <option key={0} value={0}>
-                    Selecione
-                  </option>
-                  {this.state.list.map((med) => {
-                    let styles = {
-                      width: "35px",
-                    };
-                    return (
-                      <option key={med.crm} value={med.crm}>
-                        {med.nomem}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-            </div>
-          </div>
+      <div className="card mt-4">
+        <div className="card-header">
+          <h5>Editando Consulta - Código: {dados.codigo}</h5>
+        </div>
+        <div className="card-body">
           <div className="form">
             <div className="row">
               <div className="col-12 col-md-6">
                 <div className="form-group">
-                  <label>Codigo Paciente</label>
+                  <label>Data</label>
                   <input
-                    value={dados.idpaciente}
+                    value={this.formatDateForInput(dados.data)}
+                    type="date"
+                    className="form-control"
+                    name="data"
+                    onChange={this.updateFieldAgenda}
+                  />
+                </div>
+              </div>
+
+              <div className="col-12 col-md-6">
+                <div className="form-group">
+                  <label>Médico:</label>
+                  <select
+                    value={dados.idmedico || ""}
+                    className="form-control"
+                    name="idmedico"
+                    onChange={this.updateFieldAgenda}
+                  >
+                    <option value="">Selecione</option>
+                    {this.state.list.map((med) => (
+                      <option key={med.crm} value={med.crm}>
+                        {med.nomem}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="row">
+              <div className="col-12 col-md-6">
+                <div className="form-group">
+                  <label>Código Paciente</label>
+                  <input
+                    value={dados.idpaciente || ""}
                     type="text"
                     className="form-control"
                     name="idpaciente"
-                    onChange={(e) => this.updateFieldAgenda(e)}
-                    placeholder="Digite o nome..."
+                    onChange={this.updateFieldAgenda}
+                    placeholder="Digite o código do paciente..."
                   />
                 </div>
               </div>
 
               <div className="col-12 col-md-6">
                 <div className="form-group">
-                  <label>Horario Inicio</label>
+                  <label>Horário Início</label>
                   <select
                     className="form-control"
-                    value={dados.horainic}
+                    value={dados.horainic || ""}
                     name="horainic"
-                    onChange={(e) => this.updateFieldAgenda(e)}
+                    onChange={this.updateFieldAgenda}
                   >
-                    <option key={0} value={0}>
-                      Selecione
-                    </option>
-                    {listHorarios.map((hora) => {
-                      let styles = {
-                        width: "35px",
-                      };
-                      return (
-                        <option key={hora} value={hora}>
-                          {hora}
-                        </option>
-                      );
-                    })}
+                    <option value="">Selecione</option>
+                    {listHorarios.map((hora) => (
+                      <option key={hora} value={hora}>
+                        {hora}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
+            </div>
+
+            <div className="row">
               <div className="col-12 col-md-6">
                 <div className="form-group">
-                  <label>Horario Fim</label>
+                  <label>Horário Fim</label>
                   <select
                     className="form-control"
-                    value={dados.horafim}
+                    value={dados.horafim || ""}
                     name="horafim"
-                    onChange={(e) => this.updateFieldAgenda(e)}
+                    onChange={this.updateFieldAgenda}
                   >
-                    <option key={0} value={0}>
-                      Selecione
-                    </option>
-                    {listHorarios.map((hora) => {
-                      let styles = {
-                        width: "35px",
-                      };
-                      return (
-                        <option key={hora} value={hora}>
-                          {hora}
-                        </option>
-                      );
-                    })}
+                    <option value="">Selecione</option>
+                    {listHorarios.map((hora) => (
+                      <option key={hora} value={hora}>
+                        {hora}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
+
               <div className="col-12 col-md-6">
                 <div className="form-group">
-                  <label>Codigo Especialidade</label>
+                  <label>Código Especialidade</label>
                   <input
                     type="text"
-                    value={dados.idespecial}
+                    value={dados.idespecial || ""}
                     className="form-control"
                     name="idespecial"
-                    onChange={(e) => this.updateFieldAgenda(e)}
-                    placeholder="Digite o nome..."
+                    onChange={this.updateFieldAgenda}
+                    placeholder="Digite o código da especialidade..."
                   />
                 </div>
               </div>
+            </div>
 
+            <div className="row">
               <div className="col-12 col-md-6">
                 <div className="form-group">
-                  <label>Valor pago</label>
+                  <label>Valor Pago</label>
                   <input
-                    type="text"
-                    value={dados.valorpago}
+                    type="number"
+                    step="0.01"
+                    value={dados.valorpago || ""}
                     className="form-control"
                     name="valorpago"
-                    onChange={(e) => this.updateFieldAgenda(e)}
-                    placeholder="Digite o nome..."
+                    onChange={this.updateFieldAgenda}
+                    placeholder="Digite o valor..."
                   />
                 </div>
               </div>
 
               <div className="col-12 col-md-6">
                 <div className="form-group">
-                  <label>pagou</label>
+                  <label>Pagou</label>
                   <select
                     className="form-control"
-                    value={dados.pagou}
+                    value={dados.pagou !== undefined ? dados.pagou : ""}
                     name="pagou"
-                    onChange={(e) => this.updateFieldAgenda(e)}
+                    onChange={this.updateFieldAgenda}
                   >
-                    <option key={0} value={0}>
-                      Selecione
-                    </option>
-                    <option key={1} value={true}>
-                      Sim
-                    </option>
-                    <option key={2} value={false}>
-                      Não
-                    </option>
+                    <option value="">Selecione</option>
+                    <option value={true}>Sim</option>
+                    <option value={false}>Não</option>
                   </select>
                 </div>
               </div>
+            </div>
 
+            <div className="row">
               <div className="col-12 col-md-6">
                 <div className="form-group">
-                  <label>Forma de pagamento</label>
+                  <label>Forma de Pagamento</label>
                   <input
-                    value={dados.formapagamento}
+                    value={dados.formapagamento || ""}
                     type="text"
                     className="form-control"
                     name="formapagamento"
-                    onChange={(e) => this.updateFieldAgenda(e)}
-                    placeholder="Digite o forma de pagamento..."
+                    onChange={this.updateFieldAgenda}
+                    placeholder="Digite a forma de pagamento..."
                   />
                 </div>
               </div>
@@ -615,10 +542,13 @@ export default class RegisterMedico extends Component {
             <div className="row">
               <div className="col-12 d-flex justify-content-end">
                 <button
-                  className="btn btn-primary"
-                  onClick={(e) => this.save(e)}
+                  className="btn btn-secondary mr-2"
+                  onClick={this.cancelEdit}
                 >
-                  Editar dados Consulta
+                  Cancelar
+                </button>
+                <button className="btn btn-primary" onClick={this.save}>
+                  Salvar Alterações
                 </button>
               </div>
             </div>
@@ -747,6 +677,7 @@ export default class RegisterMedico extends Component {
               <th>Paciente</th>
               <th>Médico</th>
               <th>Valor</th>
+              <th>Status Pagamento</th>
               <th>Ações</th>
             </tr>
           </thead>
@@ -766,19 +697,61 @@ export default class RegisterMedico extends Component {
                     ? consulta.valorpago.toFixed(2)
                     : "0,00"}
                 </td>
-
+                <td>
+                  <span
+                    className={`badge ${
+                      consulta.pagou ? "badge-success" : "badge-warning"
+                    }`}
+                  >
+                    {consulta.pagou ? "Pago" : "Pendente"}
+                  </span>
+                </td>
                 <td>
                   <button
-                    className="btn btn-sm btn-primary mr-2"
-                    onClick={() => this.handleEdit(consulta.codigo)}
+                    className="btn btn-sm btn-primary"
+                    onClick={() => this.handleEdit(consulta)}
+                    disabled={this.state.agendaOpen} // Desabilita se já estiver editando
                   >
-                    Editar
+                    <i className="fa fa-edit"></i> Editar
                   </button>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+    );
+  }
+
+  renderBenchmark() {
+    return (
+      <div className="card mt-5">
+        <div className="card-body">
+          <h5 className="card-title">Benchmark de Consulta SQL</h5>
+          <div className="form-group">
+            <label>Cláusula WHERE (ex: codigo = 30000)</label>
+            <input
+              type="text"
+              className="form-control"
+              value={this.state.benchmarkWhere || ""}
+              onChange={(e) =>
+                this.setState({ benchmarkWhere: e.target.value })
+              }
+            />
+          </div>
+          <button className="btn btn-primary mr-2" onClick={this.runBenchmark}>
+            Executar EXPLAIN
+          </button>
+          <button className="btn btn-secondary" onClick={this.createIndex}>
+            Criar Índice em idmedico
+          </button>
+
+          {this.state.benchmarkPlan && (
+            <pre className="mt-3 bg-light p-3">
+              {JSON.stringify(this.state.benchmarkPlan, null, 2)}
+            </pre>
+          )}
+        </div>
       </div>
     );
   }
@@ -804,47 +777,26 @@ export default class RegisterMedico extends Component {
     }
   };
 
-  renderBenchmark() {
-    return (
-      <div className="card mt-5">
-        <div className="card-body">
-          <h5 className="card-title">Benchmark de Consulta SQL</h5>
-          <div className="form-group">
-            <label>Cláusula WHERE (ex: codigo = 30000)</label>
-            <input
-              type="text"
-              className="form-control"
-              value={this.state.benchmarkWhere}
-              onChange={(e) =>
-                this.setState({ benchmarkWhere: e.target.value })
-              }
-            />
-          </div>
-          <button className="btn btn-primary mr-2" onClick={this.runBenchmark}>
-            Executar EXPLAIN
-          </button>
-          <button className="btn btn-secondary" onClick={this.createIndex}>
-            Criar Índice em idmedico
-          </button>
-
-          {this.state.benchmarkPlan && (
-            <pre className="mt-3 bg-light p-3">
-              {JSON.stringify(this.state.benchmarkPlan, null, 2)}
-            </pre>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   render() {
     return (
       <Main {...headerProps}>
-        {this.renderFilters()}
-        {this.renderPageSizeSelector()}
-        {this.renderConsultaTable()}
-        {this.renderPagination()}
-        {this.renderBenchmark()}
+        {!this.state.agendaOpen && (
+          <div>
+            {this.renderFilters()}
+            {this.renderPageSizeSelector()}
+            {this.renderConsultaTable()}
+            {this.renderPagination()}
+          </div>
+        )}
+
+        {/* Formulário de edição */}
+        {this.state.agendaOpen &&
+          this.formAgenda(
+            this.generateTimeSlots("08:00", "18:00", 30),
+            this.state.dadosAgenda // ← Usar o estado atual
+          )}
+
+        {!this.state.agendaOpen && this.renderBenchmark()}
       </Main>
     );
   }

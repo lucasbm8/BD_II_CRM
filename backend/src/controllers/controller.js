@@ -217,43 +217,98 @@ exports.agendar = async (req, res) => {
 exports.atualizarAgenda = async (req, res) => {
   try {
     const { dadosAgenda } = req.body;
-    console.log(dadosAgenda);
-    var query =
-      "update consulta  set horainic = $1,horafim = $2, data = $3,idpaciente =$4 idespecial = $5, idmedico = $6, valorpago = $7, pagou=$8, formapagamento = $9,  where codigo  = $10";
+    console.log("Dados recebidos para atualização:", dadosAgenda);
 
-    const response = await db.query(
-      "update consulta  set horainic = $1,horafim = $2, data = $3,idpaciente =$4, idespecial = $5, idmedico = $6, valorpago = $7, pagou=$8, formapagamento = $9  where codigo  = $10",
-      [
-        dadosAgenda.horainic,
-        dadosAgenda.horafim,
-        dadosAgenda.data,
-        dadosAgenda.idpaciente,
-        dadosAgenda.idespecial,
-        dadosAgenda.idmedico,
-        dadosAgenda.valorpago,
-        dadosAgenda.pagou,
-        dadosAgenda.formapagamento,
-        dadosAgenda.codigo,
-      ]
-    );
-    console.log(response);
+    // Validações básicas
+    if (!dadosAgenda.codigo) {
+      return res
+        .status(400)
+        .send({ error: "Código da consulta é obrigatório" });
+    }
 
-    const response2 = await db.query(
-      "update agenda set idagenda =$1, horainicio =$2 , horafim =$3 ,diasemana = $4,idm =$5 ",
-      [
-        dadosAgenda.codigo,
-        dadosAgenda.horainic,
-        dadosAgenda.horafim,
-        dadosAgenda.diasemana,
-        dadosAgenda.crm,
-      ]
-    );
-    console.log(response2);
+    // Query para atualizar apenas a tabela consulta
+    const queryConsulta = `
+      UPDATE consulta 
+      SET horainic = $1, 
+          horafim = $2, 
+          data = $3, 
+          idpaciente = $4, 
+          idespecial = $5, 
+          idmedico = $6, 
+          valorpago = $7, 
+          pagou = $8, 
+          formapagamento = $9 
+      WHERE codigo = $10
+    `;
 
-    res.status(200).send({ response });
+    // Executar update na tabela consulta
+    const responseConsulta = await db.query(queryConsulta, [
+      dadosAgenda.horainic,
+      dadosAgenda.horafim,
+      dadosAgenda.data,
+      dadosAgenda.idpaciente,
+      dadosAgenda.idespecial,
+      dadosAgenda.idmedico,
+      dadosAgenda.valorpago,
+      dadosAgenda.pagou,
+      dadosAgenda.formapagamento,
+      dadosAgenda.codigo,
+    ]);
+
+    console.log("Update consulta realizado:", responseConsulta.rowCount);
+
+    // Só atualizar agenda se temos diasemana
+    let agendaUpdated = false;
+    if (dadosAgenda.diasemana !== undefined && dadosAgenda.diasemana !== null) {
+      try {
+        const queryAgenda = `
+          UPDATE agenda 
+          SET horainicio = $1, 
+              horafim = $2, 
+              diasemana = $3, 
+              idm = $4 
+          WHERE idagenda = $5
+        `;
+
+        const responseAgenda = await db.query(queryAgenda, [
+          dadosAgenda.horainic,
+          dadosAgenda.horafim,
+          dadosAgenda.diasemana,
+          dadosAgenda.idmedico,
+          dadosAgenda.codigo,
+        ]);
+
+        agendaUpdated = responseAgenda.rowCount > 0;
+        console.log("Update agenda realizado:", responseAgenda.rowCount);
+      } catch (agendaError) {
+        console.log(
+          "Erro ao atualizar agenda (ignorado):",
+          agendaError.message
+        );
+      }
+    }
+
+    // Verificar se pelo menos a consulta foi atualizada
+    if (responseConsulta.rowCount === 0) {
+      return res.status(404).send({
+        error: "Consulta não encontrada ou nenhum dado foi alterado",
+      });
+    }
+
+    // Retornar sucesso
+    res.status(200).send({
+      success: true,
+      message: "Consulta atualizada com sucesso",
+      consultaUpdated: responseConsulta.rowCount > 0,
+      agendaUpdated: agendaUpdated,
+    });
   } catch (error) {
-    console.error("Erro ao atualizar agenda:", error);
-    res.status(500).send("Erro ao atualizar agenda");
+    console.error("Erro ao atualizar consulta:", error);
+
+    res.status(500).send({
+      error: "Erro interno do servidor ao atualizar consulta",
+      details: error.message,
+    });
   }
 };
 
