@@ -132,6 +132,16 @@ Para uma configuração mais simples, configure a senha do usuário padrão do P
 
 ---
 
+## 🛠️ Estrutura do Projeto
+
+arquivo controller.js tem todas as funcionalidades e é o core do backend que faz as queries
+
+arquivos dentro de componentes é todo o frontend que chama o backend que faz as queries, só bater um com o outro para verificar o fluxo.
+
+TENHA CERTEZA QUE AMBOS cd backend npm run dev e em outro terminal cd frontend npm start estejam rodando sem erro antes de fazer qualquer coisa
+
+o frontend é pra abrir sozinho no seu navegador ou então https://localhost:3000
+
 ## 📸 Modelo Relacional
 
 ![Texto Alternativo](https://github.com/lucasbm8/BD_II_CRM/blob/feature/melhorias/MODELO%20ER.jpg)
