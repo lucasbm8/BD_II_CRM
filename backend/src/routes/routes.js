@@ -54,9 +54,24 @@ router.put("/pacientes/:codigop", controller.updatePaciente);
 // DELETE: Deleta um paciente e suas referências em tabelas filhas (CódigoP no parâmetro da URL)
 router.delete("/pacientes/:codigop", controller.deletePaciente);
 
-// Rotas de consultas
+// ==============================
+// ROTAS PARA CONSULTAS
+// ==============================
+
+// GET: Lista todas as consultas com detalhes (inclui paginação e filtros)
+// URL: /consultas
+router.get("/consultas", controller.showConsultas);
 
 router.get("/listarConsultas", controller.showConsultas);
 router.get("/benchmark/explain", controller.explainConsulta);
+// POST: Popula a tabela Consulta com dados para benchmark
+router.post("/benchmark/populate-consultas", controller.populateConsultas);
 
+router.get("/benchmark/explain-query", controller.runExplainQuery); // Rota alterada para ser mais genérica
+
+// POST: Cria um índice em idmedico na tabela Consulta
+router.post("/benchmark/create-index-medico", controller.createIndexMedico); // Rota alterada para ser mais específica
+
+// POST: Cria um índice na coluna 'DATA' da tabela 'Consulta'
+router.post("/benchmark/create-index-data", controller.createIndexData); // Nova rota para índice em data
 module.exports = router;
