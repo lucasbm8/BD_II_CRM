@@ -852,30 +852,64 @@ exports.deletePaciente = async (req, res) => {
   }
 };
 
-//Consultas detalhadas
+// ==============================
+// MÓDULO DE CONSULTAS
+// ==============================
+
+/**
+ * GET - Lista todas as consultas com detalhes de médico, paciente e especialidade.
+ * Suporta paginação e filtros. Ordena por Código DESC.
+ */
 exports.showConsultas = async (req, res) => {
+  // Essa função já existe e está boa, só confirmando a ordenação
   try {
-    // FORÇAR os parâmetros como números inteiros
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseInt(req.query.limit, 10) || 20;
     const offset = (page - 1) * limit;
 
-    // Query com LIMIT e OFFSET explícitos
+    let filterConditions = [];
+    let filterParams = [];
+    let paramIndex = 1;
+
+    if (req.query.codigo) {
+      filterConditions.push(`c.codigo = $${paramIndex++}`);
+      filterParams.push(parseInt(req.query.codigo, 10));
+    }
+    if (req.query.nomePaciente) {
+      // Filtro pelo nome do paciente
+      filterConditions.push(`p.nomep ILIKE $${paramIndex++}`);
+      filterParams.push(`%${req.query.nomePaciente}%`);
+    }
+    if (req.query.dataInicio) {
+      filterConditions.push(`c.data >= $${paramIndex++}`);
+      filterParams.push(req.query.dataInicio);
+    }
+    if (req.query.dataFim) {
+      filterConditions.push(`c.data <= $${paramIndex++}`);
+      filterParams.push(req.query.dataFim);
+    }
+
+    const whereClause =
+      filterConditions.length > 0
+        ? `WHERE ${filterConditions.join(" AND ")}`
+        : "";
+
     const queryText = `
       SELECT c.*, m.nomem as nome_medico, p.nomep as nome_paciente, e.nomee as nome_especialidade
       FROM consulta c
       JOIN medico m ON c.idmedico = m.crm
       JOIN paciente p ON c.idpaciente = p.codigop
       JOIN especialidade e ON c.idespecial = e.codigo
-      ORDER BY c.codigo ASC
-      LIMIT ${limit} OFFSET ${offset}  -- Método alternativo direto
+      ${whereClause}
+      ORDER BY c.codigo DESC -- Alterado para ordenar por código DESC
+      LIMIT $${paramIndex++} OFFSET $${paramIndex++};
     `;
 
-    console.log("Query executada:", queryText); // Log crucial
+    const countQueryText = `SELECT COUNT(*) FROM consulta c JOIN paciente p ON c.idpaciente = p.codigop ${whereClause};`;
 
     const [consultas, total] = await Promise.all([
-      db.query(queryText),
-      db.query("SELECT COUNT(*) FROM consulta"),
+      db.query(queryText, [...filterParams, limit, offset]),
+      db.query(countQueryText, filterParams),
     ]);
 
     res.status(200).json({
@@ -886,15 +920,84 @@ exports.showConsultas = async (req, res) => {
       itemsPerPage: limit,
     });
   } catch (error) {
-    console.error("Erro completo:", {
+    console.error("Erro ao buscar consultas:", {
       message: error.message,
       stack: error.stack,
-      query: queryText, // Mostra a query que falhou
     });
     res.status(500).json({
       error: "Erro ao buscar consultas",
       details: error.message,
     });
+  }
+};
+
+// ==============================
+// MÓDULO DE FERRAMENTAS DE BENCHMARK (Expandido para incluir criação de índice em data)
+// ==============================
+
+/**
+ * GET - Executa um EXPLAIN ANALYZE em uma consulta para benchmarking.
+ * @param {string} req.query.query - A consulta SQL completa a ser explicada.
+ * NÃO USAR COM ENTRADA DE USUÁRIO SEM VALIDAÇÃO ROBUSTA EM AMBIENTE DE PRODUÇÃO.
+ */
+exports.runExplainQuery = async (req, res) => {
+  const { query } = req.query; // Recebe a query completa
+  if (!query) {
+    return res
+      .status(400)
+      .send({ message: "Parâmetro 'query' é obrigatório." });
+  }
+
+  try {
+    const explainQueryText = `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${query};`;
+    const result = await db.query(explainQueryText);
+    res.json({ plan: result.rows[0]["QUERY PLAN"][0] });
+  } catch (error) {
+    console.error("Erro ao executar EXPLAIN para a query:", query, error);
+    res
+      .status(500)
+      .json({ error: "Erro ao executar EXPLAIN", details: error.message });
+  }
+};
+
+/**
+ * POST - Cria um índice em idmedico na tabela Consulta.
+ */
+exports.createIndexMedico = async (req, res) => {
+  // Renomeado para mais clareza
+  try {
+    await db.query(
+      "CREATE INDEX IF NOT EXISTS idx_consulta_idmedico ON Consulta (idMedico);"
+    );
+    res.status(200).send({
+      message:
+        "Índice 'idx_consulta_idmedico' criado com sucesso (ou já existia).",
+    });
+  } catch (error) {
+    console.error("Erro ao criar índice id_medico:", error);
+    res.status(500).send({
+      error: "Erro ao criar índice id_medico",
+      details: error.message,
+    });
+  }
+};
+
+/**
+ * POST - Cria um índice na coluna 'DATA' da tabela 'Consulta'.
+ */
+exports.createIndexData = async (req, res) => {
+  try {
+    await db.query(
+      "CREATE INDEX IF NOT EXISTS idx_consulta_data ON Consulta (DATA);"
+    );
+    res.status(200).send({
+      message: "Índice 'idx_consulta_data' criado com sucesso (ou já existia).",
+    });
+  } catch (error) {
+    console.error("Erro ao criar índice data:", error);
+    res
+      .status(500)
+      .send({ error: "Erro ao criar índice data", details: error.message });
   }
 };
 
@@ -912,5 +1015,124 @@ exports.explainConsulta = async (req, res) => {
     res
       .status(500)
       .json({ error: "Erro ao executar EXPLAIN", details: error.message });
+  }
+};
+
+/**
+ * POST - Popula a tabela Consulta com um grande número de registros para testes de performance.
+ * NOTA: Esta é uma função de desenvolvimento e deve ser usada com cautela em produção.
+ */
+exports.populateConsultas = async (req, res) => {
+  const { numRecords = 100000 } = req.body; // Número de registros a serem gerados, padrão 100k
+  const client = await db.connect();
+
+  try {
+    await client.query("BEGIN"); // Inicia uma transação para inserções em massa
+
+    // Vamos pegar alguns IDs existentes de pacientes, médicos e especialidades
+    // para que as chaves estrangeiras sejam válidas.
+    const pacientes = await client.query(
+      "SELECT CodigoP FROM Paciente LIMIT 10;"
+    );
+    const medicos = await client.query("SELECT CRM FROM Medico LIMIT 10;");
+    const especialidades = await client.query(
+      "SELECT Codigo FROM Especialidade LIMIT 10;"
+    );
+
+    if (
+      pacientes.rows.length === 0 ||
+      medicos.rows.length === 0 ||
+      especialidades.rows.length === 0
+    ) {
+      await client.query("ROLLBACK");
+      return res.status(400).send({
+        message:
+          "É necessário ter pelo menos 10 pacientes, 10 médicos e 10 especialidades para popular as consultas.",
+      });
+    }
+
+    const pacienteIds = pacientes.rows.map((p) => p.codigop);
+    const medicoCrms = medicos.rows.map((m) => m.crm);
+    const especialidadeCodes = especialidades.rows.map((e) => e.codigo);
+
+    let currentMaxCodigoResult = await client.query(
+      "SELECT COALESCE(MAX(Codigo), 0) FROM Consulta;"
+    );
+    let currentCodigo = currentMaxCodigoResult.rows[0].coalesce + 1;
+
+    console.log(`Iniciando a inserção de ${numRecords} consultas...`);
+    const insertQuery = `
+      INSERT INTO Consulta (Codigo, HoraInic, HoraFim, DATA, idPaciente, idEspecial, idMedico, ValorPago, Pagou, FormaPagamento)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);
+    `;
+
+    for (let i = 0; i < numRecords; i++) {
+      const horaInic = `${Math.floor(Math.random() * (18 - 8) + 8)
+        .toString()
+        .padStart(2, "0")}:00:00`;
+      const horaFim = `${(parseInt(horaInic.substring(0, 2)) + 1)
+        .toString()
+        .padStart(2, "0")}:00:00`;
+      const data = new Date(
+        2023,
+        Math.floor(Math.random() * 12),
+        Math.floor(Math.random() * 28) + 1
+      )
+        .toISOString()
+        .split("T")[0];
+      const idPaciente =
+        pacienteIds[Math.floor(Math.random() * pacienteIds.length)];
+      const idEspecial =
+        especialidadeCodes[
+          Math.floor(Math.random() * especialidadeCodes.length)
+        ];
+      const idMedico =
+        medicoCrms[Math.floor(Math.random() * medicoCrms.length)];
+      const valorPago = Math.round(Math.random() * 500 + 50); // entre 50 e 550
+      const pagou = Math.random() > 0.5;
+      const formaPagamento = ["Cartao", "Dinheiro", "Pix"][
+        Math.floor(Math.random() * 3)
+      ];
+
+      await client.query(insertQuery, [
+        currentCodigo++,
+        horaInic,
+        horaFim,
+        data,
+        idPaciente,
+        idEspecial,
+        idMedico,
+        valorPago,
+        pagou,
+        formaPagamento,
+      ]);
+
+      // Opcional: Inserir na tabela Agenda também se desejar que ela tenha 100k registros
+      // Você precisará de um 'diasemana' para a Agenda. Para simplificar, vou omitir aqui,
+      // mas se Agenda for relevante para performance, você a popularia aqui.
+      // const diaSemana = new Date(data).getDay().toString(); // 0-6
+      // await client.query(
+      //   "INSERT INTO Agenda (IdAgenda, HoraInicio, HoraFim, DiaSemana, idM) VALUES ($1, $2, $3, $4, $5);",
+      //   [currentCodigo -1, horaInic, horaFim, diaSemana, idMedico]
+      // );
+
+      if ((i + 1) % 10000 === 0) {
+        console.log(`Inseridos ${i + 1} registros.`);
+      }
+    }
+
+    await client.query("COMMIT");
+    console.log(`Geração de ${numRecords} consultas concluída.`);
+    res
+      .status(201)
+      .send({ message: `${numRecords} consultas geradas com sucesso!` });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Erro ao popular consultas:", error);
+    res
+      .status(500)
+      .send({ message: "Erro ao popular consultas.", details: error.message });
+  } finally {
+    client.release();
   }
 };
