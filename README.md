@@ -1,12 +1,4 @@
----
 # 📌 Clinic+
----
-
-Aryane de A Chaves 11893303
-Ellen Leal 13719902
-Júlia Machado 13861749
-Lucas Neco 12523868
-Lucas S B Martins 11892556
 
 ---
 
