@@ -1,7 +1,5 @@
-
 # 📌 Clinic+
 ---
-
 
 ## Descrição do Projeto
 
